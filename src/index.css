@@ -1,0 +1,234 @@
+:root {
+  --bg-color: #0b0510;
+  /* Deep dark purple */
+  --circuit-color: #22123d;
+  /* Lighter purple for lines */
+  --neon-purple: #b535f6;
+  /* Bright neon purple */
+  --neon-blue: #00f0ff;
+  /* Accent neon blue */
+  --text-main: #f0f0f0;
+  --text-muted: #9a8cad;
+  --surface: rgba(28, 15, 45, 0.7);
+  --border-radius: 8px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  min-height: 100vh;
+  /* Circuit board grid pattern */
+  background-image:
+    linear-gradient(var(--circuit-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--circuit-color) 1px, transparent 1px);
+  background-size: 50px 50px;
+  background-position: center;
+  position: relative;
+}
+
+/* Radial gradient to add focus to the center and darken edges */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, transparent 0%, var(--bg-color) 85%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Base Styles */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-top: 0;
+  color: var(--text-main);
+  text-shadow: 0 0 12px rgba(181, 53, 246, 0.4);
+  letter-spacing: 1px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Glass/Neon Containers */
+.glass-panel {
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(181, 53, 246, 0.3);
+  border-radius: var(--border-radius);
+  padding: 2.5rem;
+  box-shadow: 0 0 30px rgba(181, 53, 246, 0.15), inset 0 0 20px rgba(181, 53, 246, 0.05);
+  box-sizing: border-box;
+}
+
+/* Inputs */
+.input-group {
+  margin-bottom: 1.5rem;
+}
+
+.neon-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: rgba(11, 5, 16, 0.8);
+  border: 1px solid var(--circuit-color);
+  border-radius: 4px;
+  color: var(--text-main);
+  font-size: 1rem;
+  outline: none;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.neon-input:focus {
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 12px rgba(181, 53, 246, 0.5), inset 0 0 8px rgba(181, 53, 246, 0.2);
+}
+
+.neon-input::placeholder {
+  color: rgba(154, 140, 173, 0.5);
+}
+
+/* Buttons */
+.neon-button {
+  background: rgba(181, 53, 246, 0.1);
+  color: var(--neon-purple);
+  border: 1px solid var(--neon-purple);
+  padding: 14px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  transition: all 0.3s ease;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.neon-button:hover {
+  background: var(--neon-purple);
+  color: #fff;
+  box-shadow: 0 0 20px var(--neon-purple), 0 0 40px var(--neon-purple);
+  border-color: transparent;
+}
+
+.neon-button.secondary {
+  border-color: var(--neon-blue);
+  color: var(--neon-blue);
+  background: rgba(0, 240, 255, 0.1);
+}
+
+.neon-button.secondary:hover {
+  background: var(--neon-blue);
+  color: #0b0510;
+  box-shadow: 0 0 20px var(--neon-blue), 0 0 40px var(--neon-blue);
+  border-color: transparent;
+}
+
+/* Layout utilities */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 4rem);
+  /* accounting for some margin */
+}
+
+/* Navbar */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: rgba(11, 5, 16, 0.8);
+  border-bottom: 1px solid rgba(181, 53, 246, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.navbar .brand {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--neon-blue);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1rem;
+}
+
+/* Print Styles for CV Preview */
+@media print {
+  body {
+    background: #fff !important;
+    background-image: none !important;
+    color: #000 !important;
+  }
+
+  body::before {
+    display: none !important;
+  }
+
+  .navbar,
+  button,
+  .neon-button,
+  .neon-button.secondary {
+    display: none !important;
+  }
+
+  .glass-panel {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  .container {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  @page {
+    margin: 0.5cm;
+    size: A4 portrait;
+  }
+}
