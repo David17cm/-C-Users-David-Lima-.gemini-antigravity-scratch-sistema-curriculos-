@@ -391,7 +391,7 @@ export default function AdminDashboard() {
                         <div className="glass-panel" style={{ textAlign: 'center' }}>
                             <h3 style={{ marginBottom: '1rem' }}>Exportar Dados</h3>
                             <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Baixe a lista de candidatos com currículo cadastrado.</p>
-                            <button onClick={handleExportarCSV} className="neon-button" style={{ width: 'auto', minWidth: '250px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px', margin: '0 auto' }}>
+                            <button onClick={handleExportarCSV} className="neon-button" style={{ width: '100%', maxWidth: '250px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px', margin: '0 auto' }}>
                                 <Download size={18} /> EXPORTAR CSV DE CANDIDATOS
                             </button>
                         </div>

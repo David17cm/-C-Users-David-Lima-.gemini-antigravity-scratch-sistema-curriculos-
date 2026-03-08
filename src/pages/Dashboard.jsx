@@ -558,7 +558,7 @@ export default function Dashboard() {
 
                     {/* SALVAR */}
                     <div style={{ position: 'sticky', bottom: '2rem', display: 'flex', justifyContent: 'center', zIndex: 10 }}>
-                        <button type="submit" className="neon-button" style={{ width: 'auto', minWidth: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'var(--neon-blue)', color: '#000', boxShadow: '0 0 20px rgba(0,240,255,0.4)' }} disabled={saving}>
+                        <button type="submit" className="neon-button" style={{ width: '100%', maxWidth: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'var(--neon-blue)', color: '#000', boxShadow: '0 0 20px rgba(0,240,255,0.4)', marginTop: 0 }} disabled={saving}>
                             <Save size={20} /> {saving ? 'GRAVANDO...' : 'SALVAR TODO O CURRÍCULO'}
                         </button>
                     </div>
