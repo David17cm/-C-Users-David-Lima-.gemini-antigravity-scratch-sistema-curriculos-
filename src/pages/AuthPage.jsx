@@ -4,12 +4,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CircuitBoard, User, Lock, Mail, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-// Credenciais de acesso rápido para desenvolvimento
-const DEV_USERS = {
-    admin: { email: 'admin@gmail.com', password: '123456', role: 'admin', label: 'ADMIN' },
-    candidato: { email: 'teste.candidato@gmail.com', password: '123456', role: 'candidato', label: 'CANDIDATO' },
-    empresa: { email: 'teste.empresa@gmail.com', password: '123456', role: 'empresa', label: 'EMPRESA' },
-};
+// Constantes de redirecionamento
+
 
 const ROLE_REDIRECT = {
     admin: '/admin',
@@ -128,13 +124,6 @@ export default function AuthPage() {
             setError(err.message || 'Erro ao criar conta.');
             setLoading(false);
         }
-    };
-
-    const handleQuickLogin = async (userKey) => {
-        const dev = DEV_USERS[userKey];
-        setEmail(dev.email);
-        setPassword(dev.password);
-        await doLogin(dev.email, dev.password);
     };
 
     return (
@@ -287,46 +276,6 @@ export default function AuthPage() {
                         {isLogin ? 'Não tem conta? Registre-se.' : 'Já tem conta? Faça login.'}
                     </button>
                 </div>
-
-                {isLogin && (
-                    <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', letterSpacing: '1px' }}>
-                            ⚡ ACESSO RÁPIDO (DESENVOLVIMENTO)
-                        </p>
-                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                            <button
-                                type="button"
-                                disabled={loading}
-                                onClick={() => handleQuickLogin('admin')}
-                                className="neon-button secondary"
-                                style={{ fontSize: '0.7rem', padding: '6px 14px', width: 'auto', margin: 0 }}
-                            >
-                                🛡 ADMIN
-                            </button>
-                            <button
-                                type="button"
-                                disabled={loading}
-                                onClick={() => handleQuickLogin('candidato')}
-                                className="neon-button secondary"
-                                style={{ fontSize: '0.7rem', padding: '6px 14px', width: 'auto', margin: 0 }}
-                            >
-                                👤 CANDIDATO
-                            </button>
-                            <button
-                                type="button"
-                                disabled={loading}
-                                onClick={() => handleQuickLogin('empresa')}
-                                className="neon-button secondary"
-                                style={{ fontSize: '0.7rem', padding: '6px 14px', width: 'auto', margin: 0 }}
-                            >
-                                🏢 EMPRESA
-                            </button>
-                        </div>
-                        <p style={{ fontSize: '0.65rem', color: 'rgba(154,140,173,0.5)', marginTop: '0.75rem' }}>
-                            Clique para entrar diretamente com o perfil desejado
-                        </p>
-                    </div>
-                )}
             </div>
         </div>
     );
