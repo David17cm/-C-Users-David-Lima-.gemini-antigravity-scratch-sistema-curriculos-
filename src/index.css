@@ -197,30 +197,38 @@ label {
   gap: 1rem;
 }
 
+/* Dashboard Desktop Save Button container (turns into FAB on mobile) */
+.fab-container {
+  display: flex;
+  justify-content: center;
+  z-index: 10;
+  margin-top: 2rem;
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
   .container {
     padding: 1rem;
   }
-  
+
   .glass-panel {
     padding: 1.5rem;
   }
-  
+
   .navbar {
     flex-direction: column;
     padding: 1rem;
     gap: 1rem;
     text-align: center;
   }
-  
+
   .navbar .brand {
     justify-content: center;
     font-size: 1.3rem;
   }
 
   /* Wrap navbar children buttons */
-  .navbar > div:last-child {
+  .navbar>div:last-child {
     flex-wrap: wrap;
     justify-content: center;
   }
@@ -228,7 +236,7 @@ label {
   h2 {
     font-size: 1.5rem;
   }
-  
+
   h3 {
     font-size: 1.2rem;
   }
@@ -236,6 +244,59 @@ label {
   .neon-button {
     font-size: 0.9rem;
     padding: 12px 16px;
+  }
+
+  /* Fixed actions bar on CV Preview */
+  .cv-actions-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    margin-bottom: 0 !important;
+    background: var(--bg-color);
+    padding: 1rem;
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.5);
+    z-index: 50;
+    display: flex;
+    justify-content: center !important;
+    align-items: center;
+    gap: 0.5rem !important;
+  }
+
+  .cv-actions-bar>button {
+    font-size: 0.8rem;
+    padding: 10px !important;
+  }
+
+  .cv-actions-bar>div {
+    display: flex;
+    gap: 5px !important;
+  }
+
+  .cv-actions-bar>div>button {
+    font-size: 0.8rem;
+    padding: 10px 12px !important;
+  }
+
+  /* Dashboard Floating Save Button (FAB) */
+  .fab-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    margin-bottom: 0 !important;
+    background: var(--bg-color);
+    padding: 1rem;
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.5);
+    margin-top: 0 !important;
+    z-index: 50;
+  }
+
+  .fab-container button {
+    width: 100% !important;
+    max-width: 100% !important;
+    font-size: 1.1rem !important;
+    padding: 15px !important;
   }
 }
 
