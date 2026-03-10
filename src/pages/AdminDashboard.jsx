@@ -64,10 +64,51 @@ export default function AdminDashboard() {
     };
 
     const fetchUsuarios = async () => {
-        const { data } = await supabase
-            .from('user_roles')
-            .select('user_id, role, pago, created_at');
-        if (data) setUsuarios(data);
+        try {
+            // 1. Buscar todos os roles
+            const { data: rolesData, error: rolesError } = await supabase
+                .from('user_roles')
+                .select('user_id, role, pago, created_at')
+                .order('created_at', { ascending: false });
+
+            if (rolesError) throw rolesError;
+            if (!rolesData) return;
+
+            // 2. Buscar nomes de currículos
+            const { data: cvData } = await supabase
+                .from('curriculos')
+                .select('user_id, nome');
+
+            // 3. Buscar nomes de empresas
+            const { data: empData } = await supabase
+                .from('empresas')
+                .select('user_id, razao_social');
+
+            // 4. Fazer o Merge (Junção) no JS
+            const cvMap = new Map((cvData || []).map(cv => [cv.user_id, cv.nome]));
+            const empMap = new Map((empData || []).map(e => [e.user_id, e.razao_social]));
+
+            const usuariosTratados = rolesData.map(u => {
+                let nomeDisplay = 'Novo Usuário (Perfil Incompleto)'; // Fallback
+
+                if (u.role === 'candidato' && cvMap.has(u.user_id)) {
+                    nomeDisplay = cvMap.get(u.user_id);
+                } else if (u.role === 'empresa' && empMap.has(u.user_id)) {
+                    nomeDisplay = empMap.get(u.user_id);
+                } else if (u.role === 'admin') {
+                    nomeDisplay = 'Administrador do Sistema';
+                }
+
+                return {
+                    ...u,
+                    nome_display: nomeDisplay
+                };
+            });
+
+            setUsuarios(usuariosTratados);
+        } catch (err) {
+            console.error('Erro ao buscar usuários pro Admin:', err);
+        }
     };
 
     const fetchEmpresas = async () => {
@@ -234,7 +275,7 @@ export default function AdminDashboard() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
                                 <tr>
-                                    <th style={{ padding: '1rem' }}>ID do Usuário</th>
+                                    <th style={{ padding: '1rem' }}>Usuário</th>
                                     <th style={{ padding: '1rem' }}>Role</th>
                                     <th style={{ padding: '1rem' }}>Cadastrado em</th>
                                 </tr>
@@ -242,20 +283,22 @@ export default function AdminDashboard() {
                             <tbody>
                                 {usuarios.map(u => (
                                     <tr key={u.user_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{u.user_id}</td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ fontWeight: 'bold', color: 'var(--text-main)', fontSize: '1rem', marginBottom: '4px' }}>
+                                                {u.nome_display}
+                                            </div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace', opacity: 0.7 }}>
+                                                ID: {u.user_id}
+                                            </div>
+                                        </td>
                                         <td style={{ padding: '1rem' }}>
                                             <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', background: u.role === 'admin' ? 'rgba(181,53,246,0.2)' : u.role === 'empresa' ? 'rgba(0,240,255,0.1)' : 'rgba(34,197,94,0.1)', color: u.role === 'admin' ? 'var(--neon-purple)' : u.role === 'empresa' ? 'var(--neon-blue)' : '#22c55e' }}>
                                                 {u.role.toUpperCase()}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '1rem' }}>
-                                            {/* {u.role === 'candidato' && (
-                                                <span style={{ fontSize: '0.75rem', color: u.pago ? '#00ff88' : '#ff4444' }}>
-                                                    {u.pago ? '✅ PAGO' : '❌ PENDENTE'}
-                                                </span>
-                                            )} */}
+                                        <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                            {new Date(u.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
                                         </td>
-                                        <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{new Date(u.created_at).toLocaleDateString('pt-BR')}</td>
                                     </tr>
                                 ))}
                             </tbody>

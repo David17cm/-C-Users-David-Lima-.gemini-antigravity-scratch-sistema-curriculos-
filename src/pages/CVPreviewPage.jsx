@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, Image as ImageIcon } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { useAuth } from '../contexts/AuthContext';
+import * as htmlToImage from 'html-to-image';
 
 function calcularIdade(dataNascimento) {
     if (!dataNascimento) return null;
@@ -56,6 +57,25 @@ export default function CVPreviewPage() {
         documentTitle: cvData ? `Curriculo_${cvData.nome?.replace(/\s+/g, '_')}` : 'Curriculo',
     });
 
+    const handleDownloadPNG = async () => {
+        if (!componentRef.current) return;
+        try {
+            // Optional: You could set a loading state specifically for the image rendering here
+            const dataUrl = await htmlToImage.toPng(componentRef.current, {
+                quality: 0.95,
+                backgroundColor: '#ffffff',
+                pixelRatio: 2 // High resolution
+            });
+            const link = document.createElement('a');
+            link.download = `Curriculo_${cvData?.nome?.replace(/\s+/g, '_') || 'Imagem'}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch (error) {
+            console.error('Erro ao gerar PNG:', error);
+            alert('Não foi possível gerar a imagem neste momento.');
+        }
+    };
+
     if (loading) return <div className="flex-center" style={{ color: 'var(--neon-blue)' }}>Carregando currículo...</div>;
 
     const s = {
@@ -64,14 +84,19 @@ export default function CVPreviewPage() {
     };
 
     return (
-        <div style={{ minHeight: '100vh', padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: '100%', maxWidth: '800px', display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <div style={{ minHeight: '100vh', padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: '80px' }}>
+            <div className="cv-actions-bar" style={{ width: '100%', maxWidth: '800px', display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', gap: '10px' }}>
                 <button onClick={() => navigate(-1)} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}>
                     <ArrowLeft size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> VOLTAR
                 </button>
-                <button onClick={handlePrint} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: 'var(--neon-blue)', color: '#000' }}>
-                    <Printer size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> GERAR PDF
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={handleDownloadPNG} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: '#eab308', color: '#000', boxShadow: '0 0 15px rgba(234,179,8,0.4)' }}>
+                        <ImageIcon size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> IMAGEM
+                    </button>
+                    <button onClick={handlePrint} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: 'var(--neon-blue)', color: '#000' }}>
+                        <Printer size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> PDF
+                    </button>
+                </div>
             </div>
 
             {!cvData ? (
