@@ -246,7 +246,7 @@ export default function Dashboard() {
             onClick={() => sectionKey ? toggleSection(sectionKey) : null}
             style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                color: 'var(--neon-blue)', borderBottom: '1px solid rgba(0,240,255,0.2)',
+                color: '#7c3aed', borderBottom: '1px solid #e5e7eb',
                 paddingBottom: '10px', marginBottom: (sectionKey && !openSections[sectionKey]) ? '0' : '20px',
                 cursor: sectionKey ? 'pointer' : 'default', userSelect: 'none'
             }}
@@ -313,8 +313,8 @@ export default function Dashboard() {
                         {sectionHdr(<Camera size={20} />, 'FOTO DE PERFIL', 'foto')}
                         {openSections.foto && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', animation: 'fadeIn 0.3s ease' }}>
-                                <div style={{ width: '100px', height: '100px', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--neon-blue)', background: 'rgba(0,240,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                    {formData.foto_url ? <img src={formData.foto_url} alt="Foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={40} color="var(--text-muted)" />}
+                                <div style={{ width: '100px', height: '100px', borderRadius: '50%', overflow: 'hidden', border: '3px solid #7c3aed', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    {formData.foto_url ? <img src={formData.foto_url} alt="Foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={40} color="#9ca3af" />}
                                 </div>
                                 <div>
                                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>Esta foto aparece no PDF do currículo.</p>
@@ -340,18 +340,18 @@ export default function Dashboard() {
                                     </div>
                                     <div className="input-group" style={g0}>
                                         <label>Data de Nascimento *</label>
-                                        <input {...inp('dataNascimento')} type="date" style={{ colorScheme: 'dark', border: errors.dataNascimento ? '1px solid #ff4444' : undefined }} value={formData.dataNascimento} onChange={e => { setFormData(p => ({ ...p, dataNascimento: e.target.value })); setErrors(p => ({ ...p, dataNascimento: '' })); }} />
+                                        <input {...inp('dataNascimento')} type="date" style={{ colorScheme: 'dark', border: errors.dataNascimento ? '1px solid #ff4444' : undefined }} value={formData.dataNascimento} onChange={e => { setFormData(p => ({ ...p, dataNascimento: e.target.value })); if (errors.dataNascimento) setErrors(p => ({ ...p, dataNascimento: '' })); }} />
                                         {errMsg('dataNascimento')}
                                     </div>
                                     <div className="input-group" style={g0}>
                                         <label>E-mail *</label>
-                                        <input {...inp('email')} type="email" value={formData.email} onChange={e => { setFormData(p => ({ ...p, email: e.target.value })); setErrors(p => ({ ...p, email: '' })); }} />
+                                        <input {...inp('email')} type="email" inputMode="email" value={formData.email} onChange={e => { setFormData(p => ({ ...p, email: e.target.value })); if (errors.email) setErrors(p => ({ ...p, email: '' })); }} />
                                         {errMsg('email')}
                                     </div>
                                     <div className="input-group" style={g0}>
                                         <label>Telefone / WhatsApp *</label>
-                                        <input {...inp('telefone')} type="tel" placeholder="(00) 00000-0000" value={formData.telefone}
-                                            onChange={e => { setFormData(p => ({ ...p, telefone: maskPhone(e.target.value) })); setErrors(p => ({ ...p, telefone: '' })); }} />
+                                        <input {...inp('telefone')} type="tel" inputMode="numeric" placeholder="(00) 00000-0000" value={formData.telefone}
+                                            onChange={e => { setFormData(p => ({ ...p, telefone: maskPhone(e.target.value) })); if (errors.telefone) setErrors(p => ({ ...p, telefone: '' })); }} />
                                         {errMsg('telefone')}
                                     </div>
                                     <div className="input-group" style={g0}>
@@ -425,9 +425,9 @@ export default function Dashboard() {
                                 {formData.cursos_prof.length > 0 && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
                                         {formData.cursos_prof.map((c, idx) => (
-                                            <div key={idx} style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,240,255,0.25)', padding: '1.25rem', borderRadius: '8px', position: 'relative' }}>
-                                                <button type="button" onClick={() => removeCurso(c.nome)} style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer' }}><Trash2 size={16} /></button>
-                                                <h4 style={{ color: 'var(--neon-blue)', marginBottom: '1rem', marginTop: 0 }}>{c.nome}</h4>
+                                            <div key={idx} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '1.25rem', borderRadius: '8px', position: 'relative' }}>
+                                                <button type="button" onClick={() => removeCurso(c.nome)} style={{ position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                                                <h4 style={{ color: '#7c3aed', marginBottom: '1rem', marginTop: 0 }}>{c.nome}</h4>
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
                                                     <div className="input-group" style={{ marginBottom: 0 }}>
                                                         <label>Instituição</label>
@@ -504,7 +504,7 @@ export default function Dashboard() {
                                     </div>
                                     <div className="input-group" style={g0}>
                                         <label>Turno</label>
-                                        <select className="neon-input" value={formData.ensino_medio.turno} onChange={e => setFormData(p => ({ ...p, ensino_medio: { ...p.ensino_meio, turno: e.target.value } }))}>
+                                        <select className="neon-input" value={formData.ensino_medio.turno} onChange={e => setFormData(p => ({ ...p, ensino_medio: { ...p.ensino_medio, turno: e.target.value } }))}>
                                             <option value="">Selecione...</option>
                                             {TURNOS.map(t => <option key={t}>{t}</option>)}
                                         </select>
@@ -630,7 +630,7 @@ export default function Dashboard() {
 
                     {/* SALVAR */}
                     <div className="fab-container">
-                        <button type="submit" className="neon-button" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'var(--neon-blue)', color: '#000', boxShadow: '0 0 20px rgba(0,240,255,0.4)', marginTop: 0 }} disabled={saving}>
+                        <button type="submit" className="neon-button" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#000', color: '#fff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', marginTop: 0 }} disabled={saving}>
                             <Save size={20} /> {saving ? 'GRAVANDO...' : 'SALVAR TODO O CURRÍCULO'}
                         </button>
                     </div>

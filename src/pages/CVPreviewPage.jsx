@@ -54,7 +54,7 @@ export default function CVPreviewPage() {
 
     const handlePrint = useReactToPrint({
         contentRef: componentRef,
-        documentTitle: cvData ? `Curriculo_${cvData.nome?.replace(/\s+/g, '_')}` : 'Curriculo',
+        documentTitle: cvData ? `Currículo_${cvData.nome?.replace(/\s+/g, '_')}` : 'Currículo',
     });
 
     const handleDownloadPNG = async () => {
@@ -67,7 +67,7 @@ export default function CVPreviewPage() {
                 pixelRatio: 2 // High resolution
             });
             const link = document.createElement('a');
-            link.download = `Curriculo_${cvData?.nome?.replace(/\s+/g, '_') || 'Imagem'}.png`;
+            link.download = `Currículo_${cvData?.nome?.replace(/\s+/g, '_') || 'Imagem'}.png`;
             link.href = dataUrl;
             link.click();
         } catch (error) {
@@ -79,8 +79,8 @@ export default function CVPreviewPage() {
     if (loading) return <div className="flex-center" style={{ color: 'var(--neon-blue)' }}>Carregando currículo...</div>;
 
     const s = {
-        h2: { fontSize: '13pt', color: '#2c3e50', textTransform: 'uppercase', borderBottom: '1.5px solid #ccc', paddingBottom: '5px', marginBottom: '12px', textShadow: 'none' },
-        muted: { color: '#555', fontSize: '10pt' },
+        h2: { fontSize: '13pt', color: '#111', textTransform: 'uppercase', borderBottom: '2px solid #7c3aed', paddingBottom: '5px', marginBottom: '12px', textShadow: 'none' },
+        muted: { color: '#4b5563', fontSize: '10pt' },
     };
 
     return (
@@ -90,10 +90,10 @@ export default function CVPreviewPage() {
                     <ArrowLeft size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> VOLTAR
                 </button>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={handleDownloadPNG} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: '#eab308', color: '#000', boxShadow: '0 0 15px rgba(234,179,8,0.4)' }}>
+                    <button onClick={handleDownloadPNG} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: '#f59e0b', color: '#fff' }}>
                         <ImageIcon size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> IMAGEM
                     </button>
-                    <button onClick={handlePrint} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: 'var(--neon-blue)', color: '#000' }}>
+                    <button onClick={handlePrint} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: '#7c3aed', color: '#fff' }}>
                         <Printer size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> PDF
                     </button>
                 </div>
@@ -104,7 +104,7 @@ export default function CVPreviewPage() {
                     <h3 style={{ color: 'var(--neon-purple)' }}>Nenhum currículo encontrado.</h3>
                 </div>
             ) : (
-                <div style={{ background: '#fff', color: '#333', width: '210mm', minHeight: '297mm', padding: '15mm', boxShadow: '0 0 20px rgba(0,0,0,0.5)', boxSizing: 'border-box', marginBottom: '2rem' }}>
+                <div style={{ background: '#fff', color: '#333', width: '210mm', minHeight: '297mm', padding: '15mm', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', border: '1px solid #e5e7eb', boxSizing: 'border-box', marginBottom: '2rem' }}>
                     <div ref={componentRef} style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
                         <style type="text/css" media="print">
                             {`
@@ -118,7 +118,7 @@ export default function CVPreviewPage() {
                             {/* Cabeçalho */}
                             <div style={{ borderBottom: '2px solid #2c3e50', paddingBottom: '1.5rem', marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                                 {cvData.foto_url && (
-                                    <img src={cvData.foto_url} alt="Foto" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #2c3e50' }} />
+                                    <img src={cvData.foto_url} alt="Foto" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #7c3aed' }} />
                                 )}
                                 <div style={{ width: '100%', textAlign: 'center' }}>
                                     <h1 style={{ color: '#2c3e50', margin: '0 0 12px 0', fontSize: '2rem', letterSpacing: 'normal', textShadow: 'none', textAlign: 'center' }}>

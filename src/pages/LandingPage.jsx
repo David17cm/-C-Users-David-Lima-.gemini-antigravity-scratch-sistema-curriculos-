@@ -19,7 +19,7 @@ export default function LandingPage() {
             {/* Header / Logo */}
             <nav style={{ padding: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--neon-blue)', letterSpacing: '2px' }}>
-                    <CircuitBoard size={32} /> SISTEMA DE CURRÍCULOS PRO
+                    <CircuitBoard size={32} /> SISTEMA DE CURRÍCULOS
                 </div>
             </nav>
 
@@ -28,7 +28,7 @@ export default function LandingPage() {
                 <div style={{ maxWidth: '900px', width: '100%', textAlign: 'center' }}>
                     <div className="glass-panel" style={{ padding: '4rem 2rem', border: '1px solid rgba(0,240,255,0.15)', boxShadow: '0 0 40px rgba(0,0,0,0.3)' }}>
                         <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.5rem)', color: '#fff', marginBottom: '1.5rem', lineHeight: 1.1 }}>
-                            Conectando <span style={{ color: 'var(--neon-blue)' }}>Talentos</span> ao <br />
+                            <span style={{ color: 'var(--neon-blue)' }}>Talentos</span> <br />
                             <span style={{ color: 'var(--neon-purple)' }}>Futuro do Trabalho</span>
                         </h1>
                         <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto 3rem', lineHeight: 1.6 }}>
@@ -66,16 +66,13 @@ export default function LandingPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                             <Building size={20} /> Empresas Verificadas
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                            <ShieldCheck size={20} /> Acesso Vitalício Pago
-                        </div>
                     </div>
                 </div>
             </main>
 
             {/* Footer */}
             <footer style={{ padding: '2rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', color: 'rgba(154,140,173,0.5)', fontSize: '0.85rem' }}>
-                &copy; 2026 Sistema de Currículos Pro. Desenvolvido para David Lima.
+                &copy; 2026 Sistema de Currículos. Desenvolvido para David Lima.
             </footer>
 
             <style>{`

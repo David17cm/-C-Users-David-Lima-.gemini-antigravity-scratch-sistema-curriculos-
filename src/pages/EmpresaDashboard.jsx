@@ -153,42 +153,70 @@ export default function EmpresaDashboard() {
     const atualizarFiltro = (field, value) => setFiltros(prev => ({ ...prev, [field]: value }));
     const atualizarCursoFiltro = (idx, value) => setFiltros(prev => { const c = [...prev.cursos]; c[idx] = value; return { ...prev, cursos: c }; });
 
-    // Aplica filtros nos talentos de forma otimizada
-    const talentosFiltrados = useMemo(() => {
-        return talentos.filter(t => {
+    // Sistema de Match e Filtros Diretos
+    const talentosComMatch = useMemo(() => {
+        let maxPontos = 0;
+
+        const cursosAtivos = filtros.cursos.filter(c => c.trim());
+        if (cursosAtivos.length > 0) maxPontos += cursosAtivos.length; // 1 pt por curso
+        if (filtros.cidade.trim()) maxPontos += 1;
+        if (filtros.habilidade.trim()) maxPontos += 1;
+        if (filtros.nivelFormacao !== 'Qualquer') maxPontos += 1;
+
+        const processados = talentos.map(t => {
+            // Se tiver filtro de NOME ou IDADE, consideramos filtros restritivos (eliminatórios)
             const nome = filtros.nome.trim().toLowerCase();
-            if (nome && !t.nome?.toLowerCase().includes(nome)) return false;
+            if (nome && !t.nome?.toLowerCase().includes(nome)) return null;
 
             const idade = calcIdade(t.data_nascimento);
-            if (filtros.idadeMin && (idade === null || idade < Number(filtros.idadeMin))) return false;
-            if (filtros.idadeMax && (idade === null || idade > Number(filtros.idadeMax))) return false;
+            if (filtros.idadeMin && (idade === null || idade < Number(filtros.idadeMin))) return null;
+            if (filtros.idadeMax && (idade === null || idade > Number(filtros.idadeMax))) return null;
 
-            const cursosAtivos = filtros.cursos.filter(c => c.trim());
+            let pontos = 0;
+
             if (cursosAtivos.length > 0) {
-                const temAlgum = cursosAtivos.some(c => (t.cursos_prof || []).some(cp => {
-                    const nomeCurso = typeof cp === 'string' ? cp : cp.nome;
-                    return nomeCurso?.toLowerCase().includes(c.toLowerCase());
-                }));
-                if (!temAlgum) return false;
+                cursosAtivos.forEach(c => {
+                    const hasCurso = (t.cursos_prof || []).some(cp => {
+                        const nomeCurso = typeof cp === 'string' ? cp : cp.nome;
+                        return nomeCurso?.toLowerCase().includes(c.toLowerCase());
+                    });
+                    if (hasCurso) pontos += 1;
+                });
             }
 
-            if (filtros.cidade.trim() && !t.cidade?.toLowerCase().includes(filtros.cidade.toLowerCase())) return false;
+            if (filtros.cidade.trim() && t.cidade?.toLowerCase().includes(filtros.cidade.toLowerCase())) {
+                pontos += 1;
+            }
 
             if (filtros.habilidade.trim()) {
                 const h = filtros.habilidade.toLowerCase();
-                if (!(t.habilidades || []).some(hb => hb.toLowerCase().includes(h))) return false;
+                const hasHabilidade = (t.habilidades || []).some(hb => hb.toLowerCase().includes(h));
+                if (hasHabilidade) pontos += 1;
             }
 
             if (filtros.nivelFormacao !== 'Qualquer') {
                 const fms = t.formacoes || [];
                 const em = t.ensino_medio || {};
-                if (filtros.nivelFormacao === 'Superior Cursando' && !fms.some(f => f.status === 'cursando')) return false;
-                if (filtros.nivelFormacao === 'Superior Completo' && !fms.some(f => f.status === 'completo')) return false;
-                if (filtros.nivelFormacao === 'Ensino Médio' && em.status !== 'completo') return false;
+                let formacaoOk = false;
+                if (filtros.nivelFormacao === 'Superior Cursando' && fms.some(f => f.status === 'cursando')) formacaoOk = true;
+                if (filtros.nivelFormacao === 'Superior Completo' && fms.some(f => f.status === 'completo')) formacaoOk = true;
+                if (filtros.nivelFormacao === 'Ensino Médio' && em.status === 'completo') formacaoOk = true;
+                if (formacaoOk) pontos += 1;
             }
 
-            return true;
-        });
+            // A lógica de prioridade: Se há pontos distribuídos, calculamos o %, senão é 100% de match (nenhum critério ativo).
+            let matchScore = 0;
+            if (maxPontos > 0) {
+                matchScore = Math.round((pontos / maxPontos) * 100);
+            } else {
+                matchScore = 100; // Sem critérios definidos, todos são visualizáveis e 100% compativeis
+            }
+
+            return { ...t, matchScore };
+        }).filter(t => t !== null); // Remove apenas os que falharam nos filtros estritos (nome, idade)
+
+        // Ordena do maior match para o menor
+        return processados.sort((a, b) => b.matchScore - a.matchScore);
     }, [talentos, filtros]);
 
     if (loading) {
@@ -395,16 +423,16 @@ export default function EmpresaDashboard() {
                 {activeTab === 'talentos' && (
                     <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                            <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>BANCO de TALENTOS <span style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>({talentosFiltrados.length} candidato{talentosFiltrados.length !== 1 ? 's' : ''})</span></h2>
+                            <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>BANCO de TALENTOS <span style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>({talentosComMatch.length} candidato{talentosComMatch.length !== 1 ? 's' : ''})</span></h2>
                             <button onClick={() => setShowFiltros(!showFiltros)} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Filter size={16} /> {showFiltros ? 'OCULTAR FILTROS' : 'FILTROS AVANÇADOS'}
+                                <Filter size={16} /> {showFiltros ? 'OCULTAR PERFIL' : 'DEFINIR PERFIL DESEJADO'}
                             </button>
                         </div>
 
                         {/* Painel de filtros */}
                         {showFiltros && (
                             <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                                <h4 style={{ color: 'var(--neon-purple)', marginBottom: '1.5rem' }}>🔍 Filtros Avançados</h4>
+                                <h4 style={{ color: 'var(--neon-purple)', marginBottom: '1.5rem' }}>🎯 Perfil de Match Desejado</h4>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                                     <div className="input-group" style={{ marginBottom: 0 }}>
                                         <label>Nome do candidato</label>
@@ -463,6 +491,7 @@ export default function EmpresaDashboard() {
                                 <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
                                     <tr>
                                         <th style={{ padding: '1rem' }}>Candidato</th>
+                                        <th style={{ padding: '1rem' }}>Afinidade</th>
                                         <th style={{ padding: '1rem' }}>Idade</th>
                                         <th style={{ padding: '1rem' }}>Cidade</th>
                                         <th style={{ padding: '1rem' }}>Contato</th>
@@ -470,11 +499,20 @@ export default function EmpresaDashboard() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {talentosFiltrados.map(t => (
+                                    {talentosComMatch.map(t => (
                                         <tr key={t.user_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                             <td style={{ padding: '1rem' }}>
                                                 <p style={{ fontWeight: 'bold', marginBottom: '2px' }}>{t.nome}</p>
                                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.email}</p>
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                {t.matchScore === 100 ? (
+                                                    <span style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>🔥 100% Match</span>
+                                                ) : t.matchScore >= 50 ? (
+                                                    <span style={{ background: 'rgba(255,193,7,0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>🟡 {t.matchScore}% Match</span>
+                                                ) : (
+                                                    <span style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--text-muted)', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>⚪ {t.matchScore}% Match</span>
+                                                )}
                                             </td>
                                             <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
                                                 {calcIdade(t.data_nascimento) !== null ? `${calcIdade(t.data_nascimento)} anos` : '—'}
@@ -490,7 +528,7 @@ export default function EmpresaDashboard() {
                                             </td>
                                         </tr>
                                     ))}
-                                    {talentosFiltrados.length === 0 && (
+                                    {talentosComMatch.length === 0 && (
                                         <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Nenhum candidato encontrado com os filtros aplicados.</td></tr>
                                     )}
                                 </tbody>

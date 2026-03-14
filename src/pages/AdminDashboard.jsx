@@ -195,10 +195,10 @@ export default function AdminDashboard() {
     };
 
     const statCards = [
-        { label: 'Candidatos', value: stats.candidatos, color: 'var(--neon-blue)', icon: <Users size={28} color="var(--neon-blue)" /> },
-        { label: 'Empresas', value: stats.empresas, color: 'var(--neon-purple)', icon: <Building size={28} color="var(--neon-purple)" /> },
+        { label: 'Candidatos', value: stats.candidatos, color: '#2563eb', icon: <Users size={28} color="#2563eb" /> },
+        { label: 'Empresas', value: stats.empresas, color: '#7c3aed', icon: <Building size={28} color="#7c3aed" /> },
         // { label: 'Receita Total', value: `R$ ${stats.receitaTotal.toFixed(2)}`, color: '#00ff88', icon: <BarChart2 size={28} color="#00ff88" /> },
-        { label: 'Usuários Ativos', value: stats.usuariosAtivos, color: '#f59e0b', icon: <Users size={28} color="#f59e0b" /> },
+        { label: 'Usuários Ativos', value: stats.usuariosAtivos, color: '#d97706', icon: <Users size={28} color="#d97706" /> },
     ];
 
     const tabStyle = (t) => ({
