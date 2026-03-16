@@ -67,13 +67,17 @@ export default function AuthPage() {
 
             // Registro de Log de Acesso (Marco Civil da Internet)
             if (signInData?.user) {
-                await supabase.from('access_logs').insert([{
-                    user_id: signInData.user.id,
-                    email: loginEmail,
-                    action: 'login',
-                    user_agent: navigator.userAgent,
-                    accessed_at: new Date().toISOString()
-                }]).catch(err => console.warn('Log de acesso não registrado:', err.message));
+                try {
+                    await supabase.from('access_logs').insert([{
+                        user_id: signInData.user.id,
+                        email: loginEmail,
+                        action: 'login',
+                        user_agent: navigator.userAgent,
+                        accessed_at: new Date().toISOString()
+                    }]);
+                } catch (e) {
+                    console.warn('Log de acesso não registrado:', e.message);
+                }
             }
 
             console.log('AuthPage: Sign-in OK. Aguardando role para redirecionar...');
@@ -125,15 +129,19 @@ export default function AuthPage() {
                 ]);
 
                 // Log de Consentimento LGPD - salva data/hora exata do aceite
-                await supabase.from('consent_logs').insert([{
-                    user_id: data.user.id,
-                    email: email,
-                    accepted_terms: true,
-                    accepted_privacy: true,
-                    ip_address: null, // preenchido pelo servidor se disponível
-                    user_agent: navigator.userAgent,
-                    consented_at: new Date().toISOString()
-                }]).catch(err => console.warn('Log de consentimento não registrado:', err.message));
+                try {
+                    await supabase.from('consent_logs').insert([{
+                        user_id: data.user.id,
+                        email: email,
+                        accepted_terms: true,
+                        accepted_privacy: true,
+                        ip_address: null, // preenchido pelo servidor se disponível
+                        user_agent: navigator.userAgent,
+                        consented_at: new Date().toISOString()
+                    }]);
+                } catch (e) {
+                    console.warn('Log de consentimento não registrado:', e.message);
+                }
             }
 
             setLoading(false);
