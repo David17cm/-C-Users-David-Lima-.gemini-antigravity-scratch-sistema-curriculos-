@@ -57,6 +57,9 @@ export default function Dashboard() {
     const fileInputRef = useRef();
 
     const [formData, setFormData] = useState(EMPTY_FORM);
+    const [lastSavedData, setLastSavedData] = useState(null);
+    const [autoSaving, setAutoSaving] = useState(false);
+    const saveTimeoutRef = useRef(null);
 
     useEffect(() => {
         if (user) {
@@ -65,13 +68,63 @@ export default function Dashboard() {
         }
     }, [user]);
 
+    // Lógica de Autosave (Debounced)
+    useEffect(() => {
+        if (!user || loading || authLoading) return;
+
+        // Se os dados não mudaram em relação ao que foi carregado/salvo, não faz nada
+        if (lastSavedData && JSON.stringify(formData) === JSON.stringify(lastSavedData)) return;
+
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+        saveTimeoutRef.current = setTimeout(() => {
+            performAutosave();
+        }, 2000);
+
+        return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+    }, [formData]);
+
+    const performAutosave = async () => {
+        if (!user) return;
+        setAutoSaving(true);
+        try {
+            const payload = {
+                user_id: user.id,
+                nome: formData.nome,
+                email: formData.email,
+                telefone: formData.telefone,
+                cidade: formData.cidade,
+                endereco: formData.endereco,
+                bairro: formData.bairro,
+                numero: formData.numero,
+                data_nascimento: formData.dataNascimento,
+                resumo: formData.resumo,
+                foto_url: formData.foto_url,
+                habilidades: formData.habilidades,
+                cursos_prof: formData.cursos_prof,
+                experiencias: formData.experiencias,
+                formacoes: formData.formacoes,
+                ensino_medio: formData.ensino_medio,
+                cnh: formData.cnh,
+                updated_at: new Date().toISOString(),
+            };
+            
+            await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
+            setLastSavedData(JSON.parse(JSON.stringify(formData)));
+        } catch (err) {
+            console.warn('Autosave falhou silenciosamente:', err.message);
+        } finally {
+            setAutoSaving(false);
+        }
+    };
+
     const fetchCurriculo = async (userId) => {
         try {
             const { data } = await supabase.from('curriculos').select('*').eq('user_id', userId).single();
             if (data) {
                 const cnhRaw = data.cnh || {};
                 const emRaw = data.ensino_medio || {};
-                setFormData({
+                const loadedData = {
                     nome: data.nome || '',
                     dataNascimento: data.data_nascimento || '',
                     email: data.email || '',
@@ -88,7 +141,9 @@ export default function Dashboard() {
                     formacoes: Array.isArray(data.formacoes) ? data.formacoes : [],
                     ensino_medio: { status: emRaw.status || '', ano_cursando: emRaw.ano_cursando || '', turno: emRaw.turno || '', ano_conclusao: emRaw.ano_conclusao || '' },
                     cnh: { possui: cnhRaw.possui === true, categorias: Array.isArray(cnhRaw.categorias) ? cnhRaw.categorias : [] },
-                });
+                };
+                setFormData(loadedData);
+                setLastSavedData(JSON.parse(JSON.stringify(loadedData)));
             }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
@@ -270,7 +325,7 @@ export default function Dashboard() {
 
     return (
         <div>
-            <Navbar icon={<User size={24} />} title="PORTAL DE CURRÍCULOS">
+            <Navbar icon={<User size={24} />} title="PORTAL DE CURRÍCULOS" subtitle={autoSaving ? 'Salvando...' : 'Salvo'}>
                 <button onClick={() => navigate('/vagas')} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}>VAGAS</button>
                 <button onClick={() => navigate('/cv-preview')} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto', background: 'var(--neon-purple)', color: '#fff' }}>CURRÍCULO</button>
                 <button onClick={handleLogout} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}><LogOut size={16} style={{ display: 'inline', verticalAlign: 'middle' }} /> SAIR</button>
