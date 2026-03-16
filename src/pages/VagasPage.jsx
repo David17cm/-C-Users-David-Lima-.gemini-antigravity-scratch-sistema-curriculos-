@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, Building, ArrowLeft, Search, X, CheckCircle } from 'lucide-react';
@@ -14,74 +14,55 @@ export default function VagasPage() {
     const [hasCV, setHasCV] = useState(false);
     const [candidaturas, setCandidaturas] = useState(new Set());
     const [candidatando, setCandidatando] = useState(false);
+    const [reportingVaga, setReportingVaga] = useState(false);
+    const [reportMotive, setReportMotive] = useState('');
+    const [submittingReport, setSubmittingReport] = useState(false);
     const [toast, setToast] = useState(null);
+    const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
-    const { user } = useAuth();
 
-    useEffect(() => { fetchVagas(); }, []);
     useEffect(() => {
         if (user) {
-            fetchMeusCandidaturas();
-            checkHasCV();
+            checkUserCV();
+            fetchVagas();
+            fetchCandidaturas();
         }
     }, [user]);
 
-    const fetchVagas = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('vagas')
-                .select('*, empresas(razao_social)')
-                .eq('status', 'aberta')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
-            setVagas(data || []);
-        } catch (err) {
-            console.error('Erro ao buscar vagas:', err);
-        } finally {
-            setLoading(false);
-        }
+    const showToast = (msg, type = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 4000);
     };
 
-    const checkHasCV = async () => {
+    const checkUserCV = async () => {
         const { data } = await supabase.from('curriculos').select('id').eq('user_id', user.id).single();
         setHasCV(!!data);
     };
 
-    const fetchMeusCandidaturas = async () => {
-        const { data } = await supabase
-            .from('candidaturas')
-            .select('vaga_id')
-            .eq('user_id', user.id);
+    const fetchVagas = async () => {
+        setLoading(true);
+        const { data } = await supabase.from('vagas').select('*, empresas(razao_social)').eq('status', 'aberta').order('created_at', { ascending: false });
+        if (data) setVagas(data);
+        setLoading(false);
+    };
+
+    const fetchCandidaturas = async () => {
+        const { data } = await supabase.from('candidaturas').select('vaga_id').eq('user_id', user.id);
         if (data) setCandidaturas(new Set(data.map(c => c.vaga_id)));
     };
 
     const handleCandidatar = async (vagaId) => {
-        if (!user) { alert('Faça login para se candidatar.'); return; }
-
         if (!hasCV) {
-            if (confirm('Você ainda não preencheu seu currículo profissional. Deseja ir para o Dashboard preenchê-lo agora?')) {
-                navigate('/dashboard');
-            }
+            alert('Você precisa preencher seu currículo no Dashboard antes de se candidatar.');
+            navigate('/dashboard');
             return;
         }
-
         setCandidatando(true);
         try {
-            const { error } = await supabase
-                .from('candidaturas')
-                .insert([{ user_id: user.id, vaga_id: vagaId }]);
-
-            if (error) {
-                if (error.code === '23505') {
-                    showToast('Você já se candidatou a esta vaga!', 'warn');
-                } else {
-                    throw error;
-                }
-            } else {
-                setCandidaturas(prev => new Set([...prev, vagaId]));
-                showToast('Candidatura enviada com sucesso! ✓', 'success');
-                setSelectedVaga(null);
-            }
+            const { error } = await supabase.from('candidaturas').insert([{ user_id: user.id, vaga_id: vagaId }]);
+            if (error) throw error;
+            showToast('Candidatura enviada com sucesso! 🚀');
+            fetchCandidaturas();
         } catch (err) {
             alert('Erro ao se candidatar: ' + err.message);
         } finally {
@@ -89,24 +70,46 @@ export default function VagasPage() {
         }
     };
 
-    const showToast = (msg, type = 'success') => {
-        setToast({ msg, type });
-        setTimeout(() => setToast(null), 3500);
+    const vagasFiltradas = useMemo(() => {
+        const q = searchQuery.toLowerCase();
+        return vagas.filter(v =>
+            v.titulo.toLowerCase().includes(q) ||
+            v.empresas?.razao_social?.toLowerCase().includes(q) ||
+            v.descricao.toLowerCase().includes(q)
+        );
+    }, [vagas, searchQuery]);
+
+    const handleDenunciarInterno = async () => {
+        if (!user) { alert('Faça login para denunciar.'); return; }
+        if (!reportMotive.trim()) { alert('Por favor, descreva o motivo da denúncia.'); return; }
+
+        setSubmittingReport(true);
+        try {
+            const { error } = await supabase.from('denuncias').insert([{
+                user_id: user.id,
+                vaga_id: selectedVaga.id,
+                empresa_id: selectedVaga.empresa_id,
+                motivo: reportMotive
+            }]);
+
+            if (error) throw error;
+
+            showToast('Denúncia enviada com sucesso! Nossa equipe analisará o caso. ✓', 'success');
+            setReportingVaga(false);
+            setReportMotive('');
+        } catch (err) {
+            alert('Erro ao enviar denúncia: ' + err.message);
+        } finally {
+            setSubmittingReport(false);
+        }
     };
 
-    const vagasFiltradas = vagas.filter(v =>
-        v.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.empresas?.razao_social?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    if (loading) {
+    if (loading || authLoading) {
         return (
             <div className="container" style={{ marginTop: '2rem' }}>
-                <Skeleton width="220px" height="32px" style={{ marginBottom: '2rem' }} />
+                <Skeleton width="300px" height="32px" style={{ marginBottom: '1rem' }} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
-                    <CardSkeleton />
-                    <CardSkeleton />
-                    <CardSkeleton />
+                    <CardSkeleton /> <CardSkeleton /> <CardSkeleton />
                 </div>
             </div>
         );
@@ -131,64 +134,136 @@ export default function VagasPage() {
 
             {/* Modal de detalhes */}
             {selectedVaga && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
                     onClick={(e) => e.target === e.currentTarget && setSelectedVaga(null)}>
-                    <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto', position: 'relative' }}>
-                        <button onClick={() => setSelectedVaga(null)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                            <X size={24} />
-                        </button>
+                    <div style={{
+                        background: '#ffffff',
+                        borderRadius: '16px',
+                        width: '100%',
+                        maxWidth: '640px',
+                        maxHeight: '90vh',
+                        overflowY: 'auto',
+                        position: 'relative',
+                        boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+                        border: '1px solid #e5e7eb'
+                    }}>
+                        {/* Header do Modal */}
+                        <div style={{ padding: '2rem 2rem 1.5rem', borderBottom: '1px solid #f1f5f9', position: 'sticky', top: 0, background: '#fff', zIndex: 10, borderRadius: '16px 16px 0 0' }}>
+                            <button onClick={() => { setSelectedVaga(null); setReportingVaga(false); }} style={{
+                                position: 'absolute', top: '1.25rem', right: '1.25rem',
+                                background: '#f1f5f9', border: 'none', borderRadius: '50%',
+                                width: '36px', height: '36px', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: '#64748b', fontSize: '1.2rem', fontWeight: 'bold', lineHeight: 1
+                            }}>✕</button>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <h2 style={{ color: 'var(--neon-blue)', marginBottom: '0.5rem', paddingRight: '2rem' }}>{selectedVaga.titulo}</h2>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
-                                <Building size={16} /> {selectedVaga.empresas?.razao_social}
+                            <h2 style={{ color: '#0f172a', marginBottom: '0.75rem', paddingRight: '3rem', fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.2 }}>
+                                {selectedVaga.titulo}
+                            </h2>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
+                                <div style={{ background: 'rgba(124,58,237,0.1)', borderRadius: '6px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <Building size={14} color="var(--neon-purple)" />
+                                    <span style={{ color: '#1e293b', fontSize: '0.9rem', fontWeight: 700 }}>
+                                        {selectedVaga.empresas?.razao_social || 'Empresa Confidencial'}
+                                    </span>
+                                </div>
                             </div>
+
                             {/* Badges de info */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '0.5rem' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                 {selectedVaga.modalidade && (
-                                    <span style={{ fontSize: '0.75rem', background: 'rgba(181,53,246,0.12)', color: 'var(--neon-purple)', padding: '3px 10px', borderRadius: '12px' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, background: 'rgba(124,58,237,0.1)', color: 'var(--neon-purple)', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(124,58,237,0.2)' }}>
                                         🏢 {{ presencial: 'Presencial', hibrido: 'Híbrido', remoto: 'Remoto' }[selectedVaga.modalidade]}
                                     </span>
                                 )}
                                 {selectedVaga.cidade && (
-                                    <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', padding: '3px 10px', borderRadius: '12px' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, background: '#f8fafc', color: '#475569', padding: '4px 12px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
                                         📍 {selectedVaga.cidade}
                                     </span>
                                 )}
                                 {(selectedVaga.salario_min || selectedVaga.salario_max) && (
-                                    <span style={{ fontSize: '0.75rem', background: 'rgba(34,197,94,0.12)', color: '#22c55e', padding: '3px 10px', borderRadius: '12px' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, background: 'rgba(22,163,74,0.08)', color: '#16a34a', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(22,163,74,0.2)' }}>
                                         💰 R$ {selectedVaga.salario_min?.toLocaleString('pt-BR') || '?'} — {selectedVaga.salario_max?.toLocaleString('pt-BR') || '?'}
                                     </span>
                                 )}
-                                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>
+                                <span style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '4px 8px' }}>
                                     Publicada em {new Date(selectedVaga.created_at).toLocaleDateString('pt-BR')}
                                 </span>
                             </div>
                         </div>
 
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>
-                            <h4 style={{ color: 'var(--neon-purple)', marginBottom: '0.75rem' }}>DESCRIÇÃO DAS ATIVIDADES</h4>
-                            <p style={{ color: 'rgba(255,255,255,0.8)', lineHeight: 1.7, fontSize: '0.95rem' }}>{selectedVaga.descricao}</p>
-                        </div>
+                        {/* Corpo do Modal */}
+                        <div style={{ padding: '1.75rem 2rem' }}>
 
-                        {selectedVaga.requisitos && (
-                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>
-                                <h4 style={{ color: 'var(--neon-purple)', marginBottom: '0.75rem' }}>REQUISITOS / DIFERENCIAIS</h4>
-                                <p style={{ color: 'rgba(255,255,255,0.8)', lineHeight: 1.7, fontSize: '0.95rem' }}>{selectedVaga.requisitos}</p>
-                            </div>
-                        )}
-
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
-                            {candidaturas.has(selectedVaga.id) ? (
-                                <div style={{ textAlign: 'center', padding: '1rem', background: 'rgba(34,197,94,0.1)', border: '1px solid #22c55e', borderRadius: '8px', color: '#22c55e', fontWeight: 600 }}>
-                                    <CheckCircle size={20} style={{ display: 'inline', marginRight: '8px' }} />
-                                    CANDIDATURA ENVIADA
+                            {/* Descrição */}
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+                                    <div style={{ width: '4px', height: '20px', background: 'var(--neon-purple)', borderRadius: '4px' }}></div>
+                                    <h4 style={{ color: '#0f172a', margin: 0, fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Descrição das Atividades</h4>
                                 </div>
-                            ) : (
-                                <button onClick={() => handleCandidatar(selectedVaga.id)} disabled={candidatando} className="neon-button" style={{ margin: 0, background: 'var(--neon-blue)', color: '#000' }}>
-                                    {candidatando ? 'ENVIANDO...' : '🚀 CANDIDATAR-SE'}
-                                </button>
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem' }}>
+                                    <p style={{ color: '#334155', lineHeight: 1.8, fontSize: '0.95rem', margin: 0, whiteSpace: 'pre-line' }}>{selectedVaga.descricao || 'Nenhuma descrição fornecida.'}</p>
+                                </div>
+                            </div>
+
+                            {/* Requisitos */}
+                            {selectedVaga.requisitos && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+                                        <div style={{ width: '4px', height: '20px', background: '#2563eb', borderRadius: '4px' }}></div>
+                                        <h4 style={{ color: '#0f172a', margin: 0, fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Requisitos / Diferenciais</h4>
+                                    </div>
+                                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem' }}>
+                                        <p style={{ color: '#334155', lineHeight: 1.8, fontSize: '0.95rem', margin: 0, whiteSpace: 'pre-line' }}>{selectedVaga.requisitos}</p>
+                                    </div>
+                                </div>
                             )}
+
+                            {/* Sessão de Ação / Candidatura / Denúncia */}
+                            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                {!reportingVaga ? (
+                                    <>
+                                        {candidaturas.has(selectedVaga.id) ? (
+                                            <div style={{ textAlign: 'center', padding: '1rem', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.3)', borderRadius: '10px', color: '#16a34a', fontWeight: 700 }}>
+                                                <CheckCircle size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle' }} />
+                                                CANDIDATURA ENVIADA
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => handleCandidatar(selectedVaga.id)} disabled={candidatando} className="neon-button" style={{ margin: 0, background: 'var(--neon-purple)', fontWeight: 700, fontSize: '1rem' }}>
+                                                {candidatando ? '⏳ ENVIANDO...' : '🚀 CANDIDATAR-SE'}
+                                            </button>
+                                        )}
+
+                                        <button
+                                            onClick={() => setReportingVaga(true)}
+                                            style={{ background: 'none', border: '1px solid #fca5a5', color: '#ef4444', fontSize: '0.78rem', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', transition: 'all 0.2s', fontWeight: 600 }}
+                                        >
+                                            🚩 Denunciar esta vaga como suspeita
+                                        </button>
+                                    </>
+                                ) : (
+                                    <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <h4 style={{ color: '#be123c', margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>DENUNCIAR VAGA</h4>
+                                            <button onClick={() => setReportingVaga(false)} style={{ background: 'none', border: 'none', color: '#be123c', cursor: 'pointer', fontWeight: 700 }}>CANCELAR</button>
+                                        </div>
+                                        <textarea
+                                            placeholder="Descreva o motivo da denúncia (vaga falsa, golpe, preconceito, etc)..."
+                                            value={reportMotive}
+                                            onChange={(e) => setReportMotive(e.target.value)}
+                                            style={{ width: '100%', minHeight: '100px', border: '1px solid #fecdd3', borderRadius: '8px', padding: '0.75rem', fontSize: '0.9rem', outline: 'none', resize: 'vertical' }}
+                                        />
+                                        <button
+                                            onClick={handleDenunciarInterno}
+                                            disabled={submittingReport}
+                                            style={{ background: '#e11d48', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', opacity: submittingReport ? 0.7 : 1 }}
+                                        >
+                                            {submittingReport ? 'ENVIANDO...' : 'ENVIAR DENÚNCIA AGORA'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -216,30 +291,109 @@ export default function VagasPage() {
                 ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
                         {vagasFiltradas.map((vaga) => (
-                            <div key={vaga.id} className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                                    <h3 style={{ margin: 0, color: '#fff', fontSize: '1.1rem', flex: 1 }}>{vaga.titulo}</h3>
+                            <div key={vaga.id} className="glass-panel" style={{
+                                padding: '1.75rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                transition: 'all 0.3s ease',
+                                border: '1px solid #eef2f6',
+                                position: 'relative',
+                                overflow: 'hidden'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+                                    <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem', fontWeight: 800, flex: 1, letterSpacing: '-0.03em' }}>
+                                        {vaga.titulo.toUpperCase()}
+                                    </h3>
                                     {candidaturas.has(vaga.id) && (
-                                        <span style={{ fontSize: '0.65rem', background: 'rgba(34,197,94,0.15)', color: '#22c55e', padding: '2px 8px', borderRadius: '10px', whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                                        <span style={{
+                                            fontSize: '0.65rem',
+                                            fontWeight: 700,
+                                            background: 'rgba(34,197,94,0.1)',
+                                            color: '#16a34a',
+                                            padding: '4px 10px',
+                                            borderRadius: '20px',
+                                            border: '1px solid rgba(34,197,94,0.2)',
+                                            whiteSpace: 'nowrap',
+                                            marginLeft: '8px'
+                                        }}>
                                             ✓ CANDIDATADO
                                         </span>
                                     )}
                                 </div>
 
-                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-                                    <Building size={15} style={{ color: 'var(--text-muted)' }} />
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>{vaga.empresas?.razao_social}</span>
-                                    {vaga.modalidade && <span style={{ fontSize: '0.68rem', background: 'rgba(181,53,246,0.12)', color: 'var(--neon-purple)', padding: '2px 7px', borderRadius: '10px' }}>{{ presencial: 'Presencial', hibrido: 'Híbrido', remoto: 'Remoto' }[vaga.modalidade]}</span>}
-                                    {vaga.cidade && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>📍 {vaga.cidade}</span>}
+                                <div style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    marginBottom: '1rem',
+                                    padding: '8px 12px',
+                                    background: '#f8fafc',
+                                    borderRadius: '10px',
+                                    border: '1px solid #f1f5f9'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Building size={16} color="var(--neon-purple)" />
+                                        <span style={{ color: '#1e293b', fontSize: '0.9rem', fontWeight: 700 }}>
+                                            {vaga.empresas?.razao_social || 'Empresa Confidencial'}
+                                        </span>
+                                    </div>
+
+                                    {vaga.modalidade && (
+                                        <span style={{
+                                            fontSize: '0.7rem',
+                                            fontWeight: 600,
+                                            background: 'rgba(124, 58, 237, 0.1)',
+                                            color: 'var(--neon-purple)',
+                                            padding: '3px 9px',
+                                            borderRadius: '6px',
+                                            textTransform: 'uppercase'
+                                        }}>
+                                            {{ presencial: 'Presencial', hibrido: 'Híbrido', remoto: 'Remoto' }[vaga.modalidade]}
+                                        </span>
+                                    )}
+
+                                    {vaga.cidade && (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            📍 {vaga.cidade}
+                                        </span>
+                                    )}
                                 </div>
+
                                 {(vaga.salario_min || vaga.salario_max) && (
-                                    <p style={{ fontSize: '0.82rem', color: '#22c55e', marginBottom: '0.75rem' }}>💰 R$ {vaga.salario_min?.toLocaleString('pt-BR') || '?'} — {vaga.salario_max?.toLocaleString('pt-BR') || '?'}</p>
+                                    <div style={{
+                                        fontSize: '0.85rem',
+                                        color: '#16a34a',
+                                        fontWeight: 700,
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px'
+                                    }}>
+                                        <span>💰</span> R$ {vaga.salario_min?.toLocaleString('pt-BR') || '?'} — {vaga.salario_max?.toLocaleString('pt-BR') || '?'}
+                                    </div>
                                 )}
-                                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', lineHeight: '1.4', marginBottom: '1.5rem', flex: 1 }}>
-                                    {vaga.descricao.length > 120 ? vaga.descricao.substring(0, 120) + '...' : vaga.descricao}
+
+                                <p style={{
+                                    color: 'var(--text-muted)',
+                                    fontSize: '0.92rem',
+                                    lineHeight: '1.6',
+                                    marginBottom: '1.75rem',
+                                    flex: 1,
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: '3',
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden'
+                                }}>
+                                    {vaga.descricao}
                                 </p>
 
-                                <button onClick={() => setSelectedVaga(vaga)} className="neon-button" style={{ margin: 0, padding: '10px' }}>
+                                <button onClick={() => setSelectedVaga(vaga)} className="neon-button" style={{
+                                    margin: 0,
+                                    padding: '12px',
+                                    fontSize: '0.85rem',
+                                    background: 'var(--neon-purple)'
+                                }}>
                                     VER DETALHES
                                 </button>
                             </div>

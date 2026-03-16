@@ -59,15 +59,24 @@ export default function AuthPage() {
         console.log('AuthPage: Tentando login para:', loginEmail);
 
         try {
-            const { error: signInError } = await supabase.auth.signInWithPassword({
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
                 email: loginEmail,
                 password: loginPassword,
             });
             if (signInError) throw signInError;
 
+            // Registro de Log de Acesso (Marco Civil da Internet)
+            if (signInData?.user) {
+                await supabase.from('access_logs').insert([{
+                    user_id: signInData.user.id,
+                    email: loginEmail,
+                    action: 'login',
+                    user_agent: navigator.userAgent,
+                    accessed_at: new Date().toISOString()
+                }]).catch(err => console.warn('Log de acesso não registrado:', err.message));
+            }
+
             console.log('AuthPage: Sign-in OK. Aguardando role para redirecionar...');
-            // Mantemos o loading: true mas podemos mudar o texto se quisermos
-            // ou deixar o useEffect lidar com a transição.
         } catch (err) {
             console.error('AuthPage: Erro no login:', err);
             setError(err.message || 'Erro ao autenticar. Verifique email e senha.');
@@ -114,6 +123,17 @@ export default function AuthPage() {
                 await supabase.from('user_roles').insert([
                     { user_id: data.user.id, role: 'candidato' }
                 ]);
+
+                // Log de Consentimento LGPD - salva data/hora exata do aceite
+                await supabase.from('consent_logs').insert([{
+                    user_id: data.user.id,
+                    email: email,
+                    accepted_terms: true,
+                    accepted_privacy: true,
+                    ip_address: null, // preenchido pelo servidor se disponível
+                    user_agent: navigator.userAgent,
+                    consented_at: new Date().toISOString()
+                }]).catch(err => console.warn('Log de consentimento não registrado:', err.message));
             }
 
             setLoading(false);
@@ -246,11 +266,11 @@ export default function AuthPage() {
                         <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                             <label style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
                                 <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: '3px' }} />
-                                <span>Li e concordo com os <b>Termos de Uso</b> do sistema.</span>
+                                <span>Li e concordo com os <a href="/termos" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Termos de Uso</a> do sistema.</span>
                             </label>
                             <label style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
                                 <input type="checkbox" checked={aceitouPrivacidade} onChange={e => setAceitouPrivacidade(e.target.checked)} style={{ marginTop: '3px' }} />
-                                <span>Autorizo o processamento dos meus dados conforme a <b>Política de Privacidade</b>.</span>
+                                <span>Autorizo o processamento dos meus dados conforme a <a href="/privacidade" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Política de Privacidade</a>.</span>
                             </label>
                         </div>
                     )}

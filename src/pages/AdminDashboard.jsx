@@ -1,7 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Shield, LogOut, Users, Building, Plus, Briefcase, BarChart2, Download } from 'lucide-react';
+import { Shield, LogOut, Users, Building, Plus, Briefcase, BarChart2, Download, FileCheck, Clock, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import Navbar from '../components/layout/Navbar';
@@ -21,6 +21,9 @@ export default function AdminDashboard() {
     const [inviting, setInviting] = useState(false);
     const [inviteMessage, setInviteMessage] = useState(null);
     const [vagaToClose, setVagaToClose] = useState(null);
+    const [accessLogs, setAccessLogs] = useState([]);
+    const [consentLogs, setConsentLogs] = useState([]);
+    const [denuncias, setDenuncias] = useState([]);
 
     useEffect(() => { fetchStats(); }, []);
     useEffect(() => {
@@ -28,6 +31,9 @@ export default function AdminDashboard() {
         if (activeTab === 'empresas') fetchEmpresas();
         if (activeTab === 'vagas') fetchTodasVagas();
         if (activeTab === 'metricas') fetchMetrics();
+        if (activeTab === 'logs') fetchAccessLogs();
+        if (activeTab === 'lgpd') fetchConsentLogs();
+        if (activeTab === 'denuncias') fetchDenuncias();
     }, [activeTab]);
 
     const fetchStats = async () => {
@@ -74,10 +80,10 @@ export default function AdminDashboard() {
             if (rolesError) throw rolesError;
             if (!rolesData) return;
 
-            // 2. Buscar nomes de currículos
+            // 2. Buscar nomes, emails e telefones de currículos
             const { data: cvData } = await supabase
                 .from('curriculos')
-                .select('user_id, nome');
+                .select('user_id, nome, email, telefone');
 
             // 3. Buscar nomes de empresas
             const { data: empData } = await supabase
@@ -85,14 +91,19 @@ export default function AdminDashboard() {
                 .select('user_id, razao_social');
 
             // 4. Fazer o Merge (Junção) no JS
-            const cvMap = new Map((cvData || []).map(cv => [cv.user_id, cv.nome]));
+            const cvMap = new Map((cvData || []).map(cv => [cv.user_id, { nome: cv.nome, email: cv.email, telefone: cv.telefone }]));
             const empMap = new Map((empData || []).map(e => [e.user_id, e.razao_social]));
 
             const usuariosTratados = rolesData.map(u => {
                 let nomeDisplay = 'Novo Usuário (Perfil Incompleto)'; // Fallback
+                let emailDisplay = 'Não informado';
+                let telefoneDisplay = 'N/A';
 
                 if (u.role === 'candidato' && cvMap.has(u.user_id)) {
-                    nomeDisplay = cvMap.get(u.user_id);
+                    const cvInfo = cvMap.get(u.user_id);
+                    nomeDisplay = cvInfo.nome;
+                    emailDisplay = cvInfo.email;
+                    telefoneDisplay = cvInfo.telefone || 'N/A';
                 } else if (u.role === 'empresa' && empMap.has(u.user_id)) {
                     nomeDisplay = empMap.get(u.user_id);
                 } else if (u.role === 'admin') {
@@ -101,7 +112,9 @@ export default function AdminDashboard() {
 
                 return {
                     ...u,
-                    nome_display: nomeDisplay
+                    nome_display: nomeDisplay,
+                    email_display: emailDisplay,
+                    telefone_display: telefoneDisplay
                 };
             });
 
@@ -159,17 +172,54 @@ export default function AdminDashboard() {
     };
 
     const handleExportarCSV = async () => {
-        const { data } = await supabase.from('curriculos').select('nome, email, telefone');
-        if (!data || data.length === 0) { alert('Nenhum candidato com currículo para exportar.'); return; }
-        const header = 'Nome,Email,Telefone\n';
-        const rows = data.map(c => `"${c.nome || ''}","${c.email || ''}","${c.telefone || ''}"`).join('\n');
-        const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `candidatos_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
+        setLoadingStats(true); // Reutilizando o loading
+        try {
+            // Buscamos os dados unificados (similar ao fetchUsuarios)
+            const { data: rolesData } = await supabase.from('user_roles').select('user_id, role, created_at').order('created_at', { ascending: false });
+            const { data: cvData } = await supabase.from('curriculos').select('user_id, nome, email, telefone');
+            const { data: empData } = await supabase.from('empresas').select('user_id, razao_social');
+
+            if (!rolesData) return;
+
+            const cvMap = new Map((cvData || []).map(cv => [cv.user_id, { nome: cv.nome, email: cv.email, telefone: cv.telefone }]));
+            const empMap = new Map((empData || []).map(e => [e.user_id, e.razao_social]));
+
+            const header = 'Nome;Email;Telefone;Tipo;Data de Cadastro\n';
+            const rows = rolesData.map(u => {
+                let nome = 'Novo Usuário';
+                let email = 'N/A';
+                let tel = 'N/A';
+
+                if (u.role === 'candidato' && cvMap.has(u.user_id)) {
+                    const info = cvMap.get(u.user_id);
+                    nome = info.nome;
+                    email = info.email;
+                    tel = info.telefone || 'N/A';
+                } else if (u.role === 'empresa' && empMap.has(u.user_id)) {
+                    nome = empMap.get(u.user_id);
+                } else if (u.role === 'admin') {
+                    nome = 'Admin';
+                }
+
+                const dataFormatada = new Date(u.created_at).toLocaleDateString('pt-BR');
+                return `"${nome}";"${email}";"${tel}";"${u.role}";"${dataFormatada}"`;
+            }).join('\n');
+
+            // Adicionando BOM UTF-8 para o Excel reconhecer acentos no Brasil
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + header + rows], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `relatorio_usuarios_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Erro ao exportar:', err);
+            alert('Erro ao gerar relatório.');
+        } finally {
+            setLoadingStats(false);
+        }
     };
 
     const handleInvite = async (e) => {
@@ -187,6 +237,39 @@ export default function AdminDashboard() {
         } catch (error) {
             setInviteMessage({ type: 'error', text: 'Erro: ' + error.message });
         } finally { setInviting(false); }
+    };
+
+    const fetchAccessLogs = async () => {
+        const { data } = await supabase.from('access_logs').select('*').order('accessed_at', { ascending: false }).limit(100);
+        if (data) setAccessLogs(data);
+    };
+
+    const fetchConsentLogs = async () => {
+        const { data } = await supabase.from('consent_logs').select('*').order('consented_at', { ascending: false }).limit(100);
+        if (data) setConsentLogs(data);
+    };
+
+    const fetchDenuncias = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('denuncias')
+                .select('*, vagas(titulo), empresas(razao_social), curriculos(nome, email)')
+                .order('created_at', { ascending: false });
+            
+            if (error) {
+                console.error("Erro ao buscar denúncias:", error);
+                // Fallback: busca sem join com currículos caso o relacionamento falhe
+                const { data: fallbackData } = await supabase
+                    .from('denuncias')
+                    .select('*, vagas(titulo), empresas(razao_social)')
+                    .order('created_at', { ascending: false });
+                setDenuncias(fallbackData || []);
+            } else {
+                setDenuncias(data || []);
+            }
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const handleLogout = async () => {
@@ -217,7 +300,7 @@ export default function AdminDashboard() {
             <div className="container" style={{ marginTop: '2rem' }}>
                 {/* Abas */}
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-                    {[['overview', '📊 Visão Geral'], ['usuarios', '👥 Usuários'], ['empresas', '🏢 Empresas'], ['vagas', '💼 Vagas'], ['metricas', '📈 Métricas']].map(([key, label]) => (
+                    {[['overview', '📊 Visão Geral'], ['usuarios', '👥 Usuários'], ['empresas', '🏢 Empresas'], ['vagas', '💼 Vagas'], ['metricas', '📈 Métricas'], ['logs', '🔐 Logs'], ['lgpd', '📋 LGPD'], ['denuncias', '🚩 Denúncias']].map(([key, label]) => (
                         <button key={key} onClick={() => setActiveTab(key)} className="neon-button secondary" style={tabStyle(key)}>{label}</button>
                     ))}
                 </div>
@@ -276,6 +359,7 @@ export default function AdminDashboard() {
                             <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
                                 <tr>
                                     <th style={{ padding: '1rem' }}>Usuário</th>
+                                    <th style={{ padding: '1rem' }}>E-mail</th>
                                     <th style={{ padding: '1rem' }}>Role</th>
                                     <th style={{ padding: '1rem' }}>Cadastrado em</th>
                                 </tr>
@@ -290,6 +374,9 @@ export default function AdminDashboard() {
                                             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace', opacity: 0.7 }}>
                                                 ID: {u.user_id}
                                             </div>
+                                        </td>
+                                        <td style={{ padding: '1rem', color: 'var(--neon-blue)', fontSize: '0.9rem' }}>
+                                            {u.email_display}
                                         </td>
                                         <td style={{ padding: '1rem' }}>
                                             <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', background: u.role === 'admin' ? 'rgba(181,53,246,0.2)' : u.role === 'empresa' ? 'rgba(0,240,255,0.1)' : 'rgba(34,197,94,0.1)', color: u.role === 'admin' ? 'var(--neon-purple)' : u.role === 'empresa' ? 'var(--neon-blue)' : '#22c55e' }}>
@@ -438,6 +525,159 @@ export default function AdminDashboard() {
                                 <Download size={18} /> EXPORTAR CSV DE CANDIDATOS
                             </button>
                         </div>
+                    </div>
+                )}
+
+                {/* === ABA: LOGS DE ACESSO === */}
+                {activeTab === 'logs' && (
+                    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Clock size={20} color="var(--neon-blue)" /> Logs de Acesso (Marco Civil)
+                            </h3>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{accessLogs.length} registros (últimos 100)</span>
+                        </div>
+                        {accessLogs.length === 0 ? (
+                            <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Nenhum log de acesso registrado ainda.</p>
+                        ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                                    <tr>
+                                        <th style={{ padding: '1rem' }}>E-mail</th>
+                                        <th style={{ padding: '1rem' }}>Ação</th>
+                                        <th style={{ padding: '1rem' }}>Navegador</th>
+                                        <th style={{ padding: '1rem' }}>Data/Hora</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {accessLogs.map(log => (
+                                        <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '1rem', color: 'var(--neon-blue)', fontSize: '0.9rem' }}>{log.email}</td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
+                                                    {log.action?.toUpperCase()}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.user_agent}</td>
+                                            <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                                {new Date(log.accessed_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                )}
+
+                {/* === ABA: LGPD - CONSENTIMENTOS === */}
+                {activeTab === 'lgpd' && (
+                    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <FileCheck size={20} color="#22c55e" /> Registros de Consentimento LGPD
+                            </h3>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{consentLogs.length} consentimentos registrados</span>
+                        </div>
+                        {consentLogs.length === 0 ? (
+                            <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Nenhum registro de consentimento ainda. Os novos cadastros aparecerão aqui.</p>
+                        ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                                    <tr>
+                                        <th style={{ padding: '1rem' }}>E-mail</th>
+                                        <th style={{ padding: '1rem' }}>Termos</th>
+                                        <th style={{ padding: '1rem' }}>Privacidade</th>
+                                        <th style={{ padding: '1rem' }}>Data do Aceite</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {consentLogs.map(log => (
+                                        <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '1rem', color: 'var(--neon-blue)', fontSize: '0.9rem' }}>{log.email}</td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', background: log.accepted_terms ? 'rgba(34,197,94,0.1)' : 'rgba(255,68,68,0.1)', color: log.accepted_terms ? '#22c55e' : '#ff4444' }}>
+                                                    {log.accepted_terms ? '✓ ACEITO' : '✗ NÃO'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', background: log.accepted_privacy ? 'rgba(34,197,94,0.1)' : 'rgba(255,68,68,0.1)', color: log.accepted_privacy ? '#22c55e' : '#ff4444' }}>
+                                                    {log.accepted_privacy ? '✓ ACEITO' : '✗ NÃO'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                                {new Date(log.consented_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                )}
+
+                {/* === ABA: DENÚNCIAS === */}
+                {activeTab === 'denuncias' && (
+                    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <AlertTriangle size={20} color="#ef4444" /> Moderação de Denúncias
+                            </h3>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{denuncias.length} denúncias pendentes</span>
+                        </div>
+                        {denuncias.length === 0 ? (
+                            <p style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Nenhuma denúncia registrada ainda. Tudo limpo! ✨</p>
+                        ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                                    <tr>
+                                        <th style={{ padding: '1rem' }}>Vaga / Empresa</th>
+                                        <th style={{ padding: '1rem' }}>Denunciante</th>
+                                        <th style={{ padding: '1rem' }}>Motivo</th>
+                                        <th style={{ padding: '1rem' }}>Data</th>
+                                        <th style={{ padding: '1rem' }}>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {denuncias.map(d => (
+                                        <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '1rem' }}>
+                                                <div style={{ fontWeight: 'bold' }}>{d.vagas?.titulo}</div>
+                                                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>{d.empresas?.razao_social}</div>
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <div style={{ fontSize: '0.85rem' }}>{d.curriculos?.nome || 'Candidato'}</div>
+                                                <div style={{ fontSize: '0.7rem', color: 'var(--neon-blue)' }}>{d.curriculos?.email}</div>
+                                            </td>
+                                            <td style={{ padding: '1rem', color: '#fda4af', fontSize: '0.85rem', maxWidth: '300px' }}>
+                                                {d.motivo}
+                                            </td>
+                                            <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                {new Date(d.created_at).toLocaleDateString('pt-BR')}
+                                            </td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (confirm('Deseja encerrar esta vaga imediatamente?')) {
+                                                                await supabase.from('vagas').update({ status: 'fechada' }).eq('id', d.vaga_id);
+                                                                await supabase.from('denuncias').update({ status: 'analisado', resolucao: 'Vaga encerrada pelo admin' }).eq('id', d.id);
+                                                                fetchDenuncias();
+                                                                alert('Vaga encerrada e denúncia marcada como resolvida.');
+                                                            }
+                                                        }}
+                                                        className="neon-button secondary"
+                                                        style={{ margin: 0, padding: '5px 10px', fontSize: '0.7rem', width: 'auto', color: '#ff4444', borderColor: '#ff4444' }}
+                                                    >
+                                                        FECHAR VAGA
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
                     </div>
                 )}
             </div>

@@ -635,6 +635,87 @@ export default function Dashboard() {
                         </button>
                     </div>
                 </form>
+
+                {/* ZONA DE PERIGO + LEGAL + PORTABILIDADE */}
+                <div style={{ marginTop: '4rem', marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <button onClick={() => navigate('/legal')} style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 20px', color: '#64748b', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', transition: 'all 0.2s' }}>
+                        ⚖️ Central Legal — Termos, Privacidade, Cookies e Políticas
+                    </button>
+
+                    {/* Exportação de Dados — Portabilidade LGPD */}
+                    <div style={{ border: '1px solid #bfdbfe', borderRadius: '8px', padding: '1.25rem', background: 'rgba(59,130,246,0.03)' }}>
+                        <h4 style={{ color: '#2563eb', margin: '0 0 0.5rem', fontSize: '0.9rem', fontWeight: 700 }}>📦 Meus Dados — Portabilidade LGPD</h4>
+                        <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '1rem' }}>
+                            Você tem o direito de baixar uma cópia completa de todos os seus dados armazenados na plataforma: currículo, candidaturas e registros de consentimento.
+                        </p>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const { data: curriculo } = await supabase.from('curriculos').select('*').eq('user_id', user.id).single();
+                                    const { data: candidaturas } = await supabase.from('candidaturas').select('*, vagas(titulo, empresas(razao_social))').eq('user_id', user.id);
+                                    const { data: consentimentos } = await supabase.from('consent_logs').select('*').eq('user_id', user.id);
+
+                                    const exportData = {
+                                        exportado_em: new Date().toISOString(),
+                                        plataforma: 'Talentos Futuro do Trabalho',
+                                        usuario: {
+                                            id: user.id,
+                                            email: user.email,
+                                        },
+                                        curriculo: curriculo || 'Nenhum currículo cadastrado',
+                                        candidaturas: candidaturas || [],
+                                        registros_consentimento: consentimentos || [],
+                                    };
+
+                                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `meus-dados-${new Date().toISOString().slice(0,10)}.json`;
+                                    a.click();
+                                    URL.revokeObjectURL(url);
+                                } catch (err) {
+                                    alert('Erro ao exportar dados: ' + err.message);
+                                }
+                            }}
+                            style={{ background: 'rgba(37,99,235,0.08)', border: '1px solid #93c5fd', color: '#2563eb', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, transition: 'all 0.2s' }}
+                        >
+                            📥 Baixar Todos os Meus Dados (JSON)
+                        </button>
+                    </div>
+
+                    <div style={{ border: '1px solid #fee2e2', borderRadius: '8px', padding: '1.25rem' }}>
+                        <h4 style={{ color: '#dc2626', margin: '0 0 0.5rem', fontSize: '0.9rem', fontWeight: 700 }}>Zona de Risco — Exclusão de Conta</h4>
+                        <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '1rem' }}>
+                            Ao excluir sua conta, todos os seus dados (currículo, foto, candidaturas) serão apagados permanentemente. Esta ação é irreversível, conforme o Direito ao Esquecimento da LGPD.
+                        </p>
+                        <button
+                            onClick={async () => {
+                                const confirmado = window.confirm('⚠️ ATENÇÃO: Todos os seus dados serão apagados permanentemente.\n\nEsta ação NÃO pode ser desfeita.\n\nDeseja continuar?');
+                                if (!confirmado) return;
+                                try {
+                                    // Log de Auditoria LGPD antes de apagar tudo
+                                    await supabase.from('access_logs').insert([{
+                                        user_id: user.id,
+                                        email: user.email,
+                                        action: 'account_deleted',
+                                        user_agent: navigator.userAgent
+                                    }]);
+
+                                    await supabase.from('curriculos').delete().eq('user_id', user.id);
+                                    await supabase.from('candidaturas').delete().eq('user_id', user.id);
+                                    await supabase.auth.signOut();
+                                    navigate('/');
+                                } catch (err) {
+                                    alert('Erro ao excluir conta: ' + err.message);
+                                }
+                            }}
+                            style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 20px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, transition: 'all 0.2s' }}
+                        >
+                            🗑️ Excluir Minha Conta Permanentemente
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );

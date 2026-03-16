@@ -507,11 +507,11 @@ export default function EmpresaDashboard() {
                                             </td>
                                             <td style={{ padding: '1rem' }}>
                                                 {t.matchScore === 100 ? (
-                                                    <span style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>🔥 100% Match</span>
+                                                    <span style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🔥 100% compatível</span>
                                                 ) : t.matchScore >= 50 ? (
-                                                    <span style={{ background: 'rgba(255,193,7,0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>🟡 {t.matchScore}% Match</span>
+                                                    <span style={{ background: 'rgba(255,193,7,0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🟡 {t.matchScore}% compatível</span>
                                                 ) : (
-                                                    <span style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--text-muted)', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>⚪ {t.matchScore}% Match</span>
+                                                    <span style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--text-muted)', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>⚪ {t.matchScore}% compatível</span>
                                                 )}
                                             </td>
                                             <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>

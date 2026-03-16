@@ -71,8 +71,43 @@ export default function LandingPage() {
             </main>
 
             {/* Footer */}
-            <footer style={{ padding: '2rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', color: 'rgba(154,140,173,0.5)', fontSize: '0.85rem' }}>
-                &copy; 2026 Sistema de Currículos. Desenvolvido para David Lima.
+            <footer style={{ padding: '2.5rem 2rem', borderTop: '1px solid rgba(255,255,255,0.07)', color: 'rgba(154,140,173,0.5)', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)' }}>
+                <div style={{ maxWidth: '900px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '2rem', textAlign: 'left' }}>
+                    {/* Coluna: Identidade */}
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--neon-blue)', fontWeight: 'bold', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
+                            <CircuitBoard size={18} /> Talentos Futuro do Trabalho
+                        </div>
+                        <p style={{ margin: 0, lineHeight: 1.7 }}>
+                            CNPJ: 00.000.000/0001-00<br />
+                            Endereço: Rua Exemplo, 123, Centro<br />
+                            Cidade - UF, CEP 00000-000
+                        </p>
+                    </div>
+
+                    {/* Coluna: Legal */}
+                    <div>
+                        <p style={{ fontWeight: 'bold', color: 'rgba(154,140,173,0.8)', marginBottom: '0.75rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Legal</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            <a href="/legal?doc=termos" style={{ color: 'rgba(154,140,173,0.6)', textDecoration: 'none' }}>Termos de Uso</a>
+                            <a href="/legal?doc=privacidade" style={{ color: 'rgba(154,140,173,0.6)', textDecoration: 'none' }}>Política de Privacidade</a>
+                        </div>
+                    </div>
+
+                    {/* Coluna: Contato */}
+                    <div>
+                        <p style={{ fontWeight: 'bold', color: 'rgba(154,140,173,0.8)', marginBottom: '0.75rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Contato</p>
+                        <p style={{ margin: 0, lineHeight: 1.7 }}>
+                            suporte@talentosfuturo.com.br<br />
+                            Responsável pelos dados (DPO):<br />
+                            dpo@talentosfuturo.com.br
+                        </p>
+                    </div>
+                </div>
+
+                <div style={{ maxWidth: '900px', margin: '2rem auto 0', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center' }}>
+                    &copy; 2026 Talentos Futuro do Trabalho. Todos os direitos reservados.
+                </div>
             </footer>
 
             <style>{`
