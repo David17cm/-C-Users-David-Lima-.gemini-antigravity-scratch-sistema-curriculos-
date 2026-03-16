@@ -71,8 +71,50 @@ export default function EmpresaDashboard() {
     };
 
     const fetchTalentos = async () => {
-        const { data } = await supabase.from('curriculos').select('user_id, nome, email, telefone, cidade, bairro, data_nascimento, habilidades, cursos_prof, formacoes, ensino_medio');
-        setTalentos(data || []);
+        // SEGURANÇA CRIT-03: Empresa SÓ visualiza candidatos que se candidataram às suas vagas.
+        // Antes, esta função buscava TODOS os currículos do banco — violação de LGPD (princípio da necessidade).
+        // Agora filtra por: candidaturas → vagas da empresa → currículos correspondentes.
+        if (!empresa?.id) return;
+
+        try {
+            // 1. Buscar IDs das vagas desta empresa
+            const { data: vagasData, error: vagasError } = await supabase
+                .from('vagas')
+                .select('id')
+                .eq('empresa_id', empresa.id);
+
+            if (vagasError || !vagasData?.length) {
+                setTalentos([]);
+                return;
+            }
+
+            const vagaIds = vagasData.map(v => v.id);
+
+            // 2. Buscar user_ids únicos que se candidataram às vagas desta empresa
+            const { data: candidaturasData, error: candError } = await supabase
+                .from('candidaturas')
+                .select('user_id')
+                .in('vaga_id', vagaIds);
+
+            if (candError || !candidaturasData?.length) {
+                setTalentos([]);
+                return;
+            }
+
+            const userIds = [...new Set(candidaturasData.map(c => c.user_id))];
+
+            // 3. Buscar currículos apenas desses candidatos
+            const { data, error: cvError } = await supabase
+                .from('curriculos')
+                .select('user_id, nome, email, telefone, cidade, bairro, data_nascimento, habilidades, cursos_prof, formacoes, ensino_medio')
+                .in('user_id', userIds);
+
+            if (cvError) throw cvError;
+            setTalentos(data || []);
+        } catch (err) {
+            console.error('Erro ao buscar talentos:', err.message);
+            setTalentos([]);
+        }
     };
 
     const handleSubmitEmpresa = async (e) => {

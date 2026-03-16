@@ -4,4 +4,14 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // SEGURANÇA MED-06: Headers de segurança para o servidor de desenvolvimento
+  // Para produção, os headers são configurados no vercel.json
+  server: {
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    }
+  }
 })

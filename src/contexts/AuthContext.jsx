@@ -12,6 +12,8 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         // Inicialização: Tenta carregar sessão existente imediatamente
+        // SEGURANÇA CRIT-01: Role NÃO é mais lida do localStorage.
+        // A fonte de verdade é sempre o banco de dados (tabela user_roles).
         const initAuth = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
@@ -22,37 +24,22 @@ export const AuthProvider = ({ children }) => {
                     setLoading(false);
                 }
             } catch (err) {
-                console.error("Erro na inicialização da autenticação:", err);
+                console.error('Erro na inicialização da autenticação:', err.message);
                 setLoading(false);
             }
         };
 
-        const cachedRole = localStorage.getItem('user_role');
-        const cachedPago = localStorage.getItem('user_pago') === 'true';
-        if (cachedRole) {
-            setRole(cachedRole);
-            setPago(cachedPago);
-        }
-
         initAuth();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            console.log('AuthContext: Evento ->', _event);
-
-            // Em caso de SIGN_IN, limpa o cache antigo para forçar espera da role real do banco
-            if (_event === 'SIGNED_IN') {
-                setRole(null);
-                setPago(false);
-                localStorage.removeItem('user_role');
-                localStorage.removeItem('user_pago');
-            }
-
             if (session?.user) {
                 setLoading(true); // Bloqueia redirecionamentos até a role ser confirmada
                 setUser(session.user);
-                fetchUserRole(session.user.id);
+                await fetchUserRole(session.user.id);
             } else {
-                localStorage.clear();
+                // SEGURANÇA HIGH-03: Remoção seletiva de chaves, não localStorage.clear()
+                localStorage.removeItem('user_role');
+                localStorage.removeItem('user_pago');
                 setUser(null);
                 setRole(null);
                 setPago(false);
@@ -65,34 +52,28 @@ export const AuthProvider = ({ children }) => {
 
     const fetchUserRole = async (userId) => {
         setLoading(true);
-        const start = Date.now();
         try {
             const { data, error } = await supabase
                 .from('user_roles')
-                .select('role')
+                .select('role, pago')
                 .eq('user_id', userId)
                 .single();
 
-            console.log(`AuthContext: Role carregada em ${Date.now() - start}ms`);
-
-            if (error) {
-                console.error("AuthContext: Erro da API Supabase ao buscar role:", error);
-            }
-
             if (!error && data) {
                 setRole(data.role);
-                setPago(true); // Forçado true conforme solicitado anteriormente
-                localStorage.setItem('user_role', data.role);
-                localStorage.setItem('user_pago', 'true');
+                setPago(data.pago ?? true);
             } else {
-                console.warn("AuthContext: Role não encontrada ou erro, definindo como candidato pelo fallback.");
-                setRole('candidato');
-                setPago(true);
-                localStorage.setItem('user_role', 'candidato');
-                localStorage.setItem('user_pago', 'true');
+                // SEGURANÇA HIGH-04: Em caso de erro, NÃO conceder role por padrão.
+                // Define role como null para que o ProtectedRoute bloqueie o acesso.
+                console.warn('AuthContext: Role não encontrada ou erro ao buscar. Acesso bloqueado.', error?.message);
+                setRole(null);
+                setPago(false);
             }
         } catch (err) {
-            console.error('AuthContext: Erro ao buscar role:', err);
+            console.error('AuthContext: Erro ao buscar role:', err.message);
+            // SEGURANÇA HIGH-04: Nenhuma role em caso de exceção — seguro por padrão.
+            setRole(null);
+            setPago(false);
         } finally {
             setLoading(false);
         }

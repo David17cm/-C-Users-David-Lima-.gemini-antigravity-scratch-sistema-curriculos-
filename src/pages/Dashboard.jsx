@@ -152,11 +152,33 @@ export default function Dashboard() {
     const handleFotoUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        // SEGURANÇA HIGH-02: Valida MIME type real do arquivo, não apenas a extensão.
+        // Extensões são fáceis de falsificar (ex: malware.php renomeado para foto.jpg).
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            alert('Tipo de arquivo inválido. Envie apenas imagens JPG, PNG ou WebP.');
+            e.target.value = ''; // Limpa o input
+            return;
+        }
+
+        // Limite de tamanho: 5MB
+        const MAX_SIZE_MB = 5;
+        if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+            alert(`A imagem deve ter no máximo ${MAX_SIZE_MB}MB.`);
+            e.target.value = '';
+            return;
+        }
+
         setUploadingFoto(true);
         try {
-            const ext = file.name.split('.').pop();
+            // Usa extensão baseada no MIME type validado, não no nome do arquivo
+            const ext = file.type.split('/')[1];
             const path = `${user.id}/avatar.${ext}`;
-            const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+            const { error } = await supabase.storage.from('avatars').upload(path, file, {
+                upsert: true,
+                contentType: file.type // Garante Content-Type correto no servidor
+            });
             if (error) throw error;
             const { data } = supabase.storage.from('avatars').getPublicUrl(path);
             setFormData(prev => ({ ...prev, foto_url: `${data.publicUrl}?t=${Date.now()}` }));

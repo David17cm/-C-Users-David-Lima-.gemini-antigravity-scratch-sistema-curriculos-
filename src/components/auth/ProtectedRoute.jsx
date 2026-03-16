@@ -2,38 +2,41 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
-    const { user, role, loading, pago } = useAuth();
+    const { user, role, loading } = useAuth();
 
-    if (loading && !user) {
-        return <div className="flex-center" style={{ color: 'var(--neon-blue)' }}>Verificando acessos...</div>;
+    // SEGURANÇA CRIT-02: Bloqueia SEMPRE enquanto carrega, independente de ter user ou não.
+    // Isso previne o race condition onde user=true mas role=null permite acesso indevido.
+    if (loading) {
+        return (
+            <div className="flex-center" style={{ color: 'var(--neon-blue)', minHeight: '100vh' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{
+                        width: '40px', height: '40px', border: '3px solid rgba(0,240,255,0.2)',
+                        borderTop: '3px solid var(--neon-blue)', borderRadius: '50%',
+                        animation: 'spin 1s linear infinite', margin: '0 auto 1rem'
+                    }} />
+                    Verificando acessos...
+                </div>
+            </div>
+        );
     }
 
+    // Usuário não autenticado → página de login
     if (!user) {
         return <Navigate to="/auth" replace />;
     }
 
-    // Se o usuário já estiver logado mas tentar acessar a URL raiz ou login, manda pro dashboard/admin
-    // (Isso será tratado no main.jsx, mas a proteção aqui garante o correto)
+    // SEGURANÇA CRIT-02: role=null após loading significa erro ao buscar perfil.
+    // Nunca permite acesso com role indefinida — redireciona para login.
+    if (!role) {
+        return <Navigate to="/auth" replace />;
+    }
 
-    // Lógica de Paywall: DESATIVADA TEMPORARIAMENTE
-    // if (role === 'candidato' && !pago && window.location.pathname === '/dashboard') {
-    //     return <Navigate to="/pagamento" replace />;
-    // }
-
-    // Se a rota exige roles específicos e o usuário não tem, redireciona para a home dele
+    // Verifica se o role do usuário está na lista de roles permitidas para esta rota
     if (allowedRoles && !allowedRoles.includes(role)) {
-        if (role === 'admin' || role === 'master') {
-            if (window.location.pathname === '/admin') return children; // Prevenção de loop
-            return <Navigate to="/admin" replace />;
-        }
-        if (role === 'empresa') {
-            if (window.location.pathname === '/empresa') return children;
-            return <Navigate to="/empresa" replace />;
-        }
-
-        // Se já estiver no dashboard e o role for candidato, não redireciona (deixa passar se o includes falhou por algum motivo de timing)
-        if (role === 'candidato' && window.location.pathname === '/dashboard') return children;
-
+        // Redireciona para o dashboard correto conforme o role real
+        if (role === 'admin' || role === 'master') return <Navigate to="/admin" replace />;
+        if (role === 'empresa') return <Navigate to="/empresa" replace />;
         return <Navigate to="/dashboard" replace />;
     }
 

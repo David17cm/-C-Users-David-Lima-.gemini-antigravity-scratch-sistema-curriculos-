@@ -1,18 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CircuitBoard, User, Lock, Mail, CheckCircle2 } from 'lucide-react';
+import { CircuitBoard, User, Lock, Mail, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 // Constantes de redirecionamento
-
-
 const ROLE_REDIRECT = {
     admin: '/admin',
     master: '/admin',
     empresa: '/empresa',
     candidato: '/dashboard',
 };
+
+// SEGURANÇA HIGH-01: Limites de tentativas de login
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 30 * 1000; // 30 segundos
+
+// SEGURANÇA MED-02: Regex de validação de email
+const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
 
 export default function AuthPage() {
     const [isLogin, setIsLogin] = useState(true);
@@ -30,33 +35,55 @@ export default function AuthPage() {
     const [aceitouTermos, setAceitouTermos] = useState(false);
     const [aceitouPrivacidade, setAceitouPrivacidade] = useState(false);
 
+    // SEGURANÇA HIGH-01: Controle de rate limiting
+    const [loginAttempts, setLoginAttempts] = useState(0);
+    const [lockedUntil, setLockedUntil] = useState(null);
+    const [lockCountdown, setLockCountdown] = useState(0);
+
     useEffect(() => {
         const mode = searchParams.get('mode');
         if (mode === 'signup') setIsLogin(false);
         else if (mode === 'login') setIsLogin(true);
     }, [searchParams]);
 
+    // SEGURANÇA HIGH-01: Countdown do bloqueio
+    useEffect(() => {
+        if (!lockedUntil) return;
+        const interval = setInterval(() => {
+            const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+            if (remaining <= 0) {
+                setLockedUntil(null);
+                setLockCountdown(0);
+                setLoginAttempts(0);
+                clearInterval(interval);
+            } else {
+                setLockCountdown(remaining);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [lockedUntil]);
+
     // Redirecionamento Automático após Login/Role carregar
     const { user, role, loading: authLoading } = useAuth();
     useEffect(() => {
-        // Log para ajudar a debugar se as roles carregaram antes de navegar:
-        console.log('AuthPage Redirection Check: user=', !!user, 'role=', role, 'authLoading=', authLoading);
-
-        // Só redireciona se já terminou de carregar do BD
         if (user && role && !authLoading) {
             const target = ROLE_REDIRECT[role] || '/dashboard';
-            // Só redireciona se não estivermos já no destino correto (prevenção de loop)
             if (window.location.pathname !== target) {
-                console.log('AuthPage: Redirecionando para', target);
                 navigate(target, { replace: true });
             }
         }
     }, [user, role, authLoading, navigate]);
 
     const doLogin = async (loginEmail, loginPassword) => {
+        // SEGURANÇA HIGH-01: Verifica bloqueio por tentativas excessivas
+        if (lockedUntil && Date.now() < lockedUntil) {
+            setError(`Muitas tentativas. Aguarde ${lockCountdown} segundos.`);
+            return;
+        }
+
         setLoading(true);
         setError(null);
-        console.log('AuthPage: Tentando login para:', loginEmail);
+        // SEGURANÇA MED-01: Removido console.log com email do usuário
 
         try {
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -65,25 +92,41 @@ export default function AuthPage() {
             });
             if (signInError) throw signInError;
 
+            // Reset tentativas após sucesso
+            setLoginAttempts(0);
+            setLockedUntil(null);
+
             // Registro de Log de Acesso (Marco Civil da Internet)
             if (signInData?.user) {
                 try {
-                    await supabase.from('access_logs').insert([{
+                    const { error: logError } = await supabase.from('access_logs').insert([{
                         user_id: signInData.user.id,
                         email: loginEmail,
                         action: 'login',
                         user_agent: navigator.userAgent,
                         accessed_at: new Date().toISOString()
                     }]);
+                    if (logError) {
+                        console.warn('Log de acesso não registrado:', logError.message);
+                    }
                 } catch (e) {
                     console.warn('Log de acesso não registrado:', e.message);
                 }
             }
 
-            console.log('AuthPage: Sign-in OK. Aguardando role para redirecionar...');
         } catch (err) {
-            console.error('AuthPage: Erro no login:', err);
-            setError(err.message || 'Erro ao autenticar. Verifique email e senha.');
+            // SEGURANÇA HIGH-01: Incrementa contador de tentativas falhas
+            const newAttempts = loginAttempts + 1;
+            setLoginAttempts(newAttempts);
+
+            if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+                const until = Date.now() + LOCKOUT_DURATION_MS;
+                setLockedUntil(until);
+                setError(`Conta bloqueada por ${LOCKOUT_DURATION_MS / 1000}s após ${MAX_LOGIN_ATTEMPTS} tentativas falhas.`);
+            } else {
+                const remaining = MAX_LOGIN_ATTEMPTS - newAttempts;
+                setError(`Credenciais inválidas. ${remaining} tentativa(s) restante(s).`);
+            }
             setLoading(false);
         }
     };
@@ -101,19 +144,31 @@ export default function AuthPage() {
         setLoading(true);
         setError(null);
 
+        // SEGURANÇA MED-02: Validação de formato de email
+        if (!EMAIL_REGEX.test(email)) {
+            setError('Por favor, insira um endereço de e-mail válido.');
+            setLoading(false);
+            return;
+        }
+
+        // SEGURANÇA MED-03: Validação de senha mais rígida (mín. 8 chars + 1 número)
+        if (password.length < 8) {
+            setError('A senha deve ter pelo menos 8 caracteres.');
+            setLoading(false);
+            return;
+        }
+
+        if (!/\d/.test(password)) {
+            setError('A senha deve conter pelo menos 1 número.');
+            setLoading(false);
+            return;
+        }
+
         if (password !== confirmPassword) {
             setError('As senhas não coincidem!');
             setLoading(false);
             return;
         }
-
-        if (password.length < 6) {
-            setError('A senha deve ter pelo menos 6 caracteres.');
-            setLoading(false);
-            return;
-        }
-
-        console.log('AuthPage: Iniciando cadastro para:', email);
 
         try {
             const { data, error: signUpError } = await supabase.auth.signUp({
@@ -124,18 +179,19 @@ export default function AuthPage() {
             if (signUpError) throw signUpError;
 
             if (data?.user) {
-                await supabase.from('user_roles').insert([
+                const { error: roleError } = await supabase.from('user_roles').insert([
                     { user_id: data.user.id, role: 'candidato' }
                 ]);
+                if (roleError) console.warn('Erro ao definir role:', roleError.message);
 
-                // Log de Consentimento LGPD - salva data/hora exata do aceite
+                // Log de Consentimento LGPD
                 try {
                     await supabase.from('consent_logs').insert([{
                         user_id: data.user.id,
                         email: email,
-                        accepted_terms: true,
-                        accepted_privacy: true,
-                        ip_address: null, // preenchido pelo servidor se disponível
+                        accepted_terms: aceitouTermos,
+                        accepted_privacy: aceitouPrivacidade,
+                        ip_address: null, // preenchido pelo servidor via Edge Function
                         user_agent: navigator.userAgent,
                         consented_at: new Date().toISOString()
                     }]);
@@ -145,14 +201,15 @@ export default function AuthPage() {
             }
 
             setLoading(false);
-            setSuccessMessage('Cadastro realizado com sucesso! Você já pode fazer o seu login abaixo.');
+            setSuccessMessage('Cadastro realizado! Verifique seu e-mail para confirmar a conta antes de fazer login.');
             setIsLogin(true);
         } catch (err) {
-            console.error('AuthPage: Erro no cadastro:', err);
             setError(err.message || 'Erro ao criar conta.');
             setLoading(false);
         }
     };
+
+    const isLocked = lockedUntil && Date.now() < lockedUntil;
 
     return (
         <div className="flex-center">
@@ -174,9 +231,30 @@ export default function AuthPage() {
                         marginBottom: '1rem',
                         border: '1px solid #ff4444',
                         fontSize: '0.9rem',
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
                     }}>
+                        <AlertTriangle size={16} />
                         {error}
+                    </div>
+                )}
+
+                {/* SEGURANÇA HIGH-01: Aviso de bloqueio por tentativas */}
+                {isLocked && (
+                    <div style={{
+                        backgroundColor: 'rgba(245,158,11,0.1)',
+                        border: '1px solid #f59e0b',
+                        color: '#f59e0b',
+                        padding: '10px',
+                        borderRadius: '4px',
+                        marginBottom: '1rem',
+                        textAlign: 'center',
+                        fontSize: '0.85rem'
+                    }}>
+                        🔒 Acesso temporariamente bloqueado. Tente novamente em <strong>{lockCountdown}s</strong>.
                     </div>
                 )}
 
@@ -248,8 +326,15 @@ export default function AuthPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
+                                minLength={isLogin ? 1 : 8}
                             />
                         </div>
+                        {/* SEGURANÇA MED-03: Dica de requisitos de senha */}
+                        {!isLogin && (
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '4px' }}>
+                                Mínimo 8 caracteres, com ao menos 1 número.
+                            </p>
+                        )}
                     </div>
 
                     {!isLogin && (
@@ -286,12 +371,14 @@ export default function AuthPage() {
                     <button
                         type="submit"
                         className="neon-button"
-                        disabled={loading || (!isLogin && (!aceitouTermos || !aceitouPrivacidade))}
-                        style={{ opacity: (!isLogin && (!aceitouTermos || !aceitouPrivacidade)) ? 0.5 : 1 }}
+                        disabled={loading || isLocked || (!isLogin && (!aceitouTermos || !aceitouPrivacidade))}
+                        style={{ opacity: (isLocked || (!isLogin && (!aceitouTermos || !aceitouPrivacidade))) ? 0.5 : 1 }}
                     >
-                        {loading
-                            ? (user ? 'REDIRECIONANDO...' : 'PROCESSANDO...')
-                            : (isLogin ? 'ENTRAR' : 'REGISTRAR')}
+                        {isLocked
+                            ? `BLOQUEADO (${lockCountdown}s)`
+                            : loading
+                                ? (user ? 'REDIRECIONANDO...' : 'PROCESSANDO...')
+                                : (isLogin ? 'ENTRAR' : 'REGISTRAR')}
                     </button>
                 </form>
 
@@ -299,7 +386,7 @@ export default function AuthPage() {
                     <button
                         type="button"
                         style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
-                        onClick={() => { setIsLogin(!isLogin); setError(null); }}
+                        onClick={() => { setIsLogin(!isLogin); setError(null); setLoginAttempts(0); setLockedUntil(null); }}
                     >
                         {isLogin ? 'Não tem conta? Registre-se.' : 'Já tem conta? Faça login.'}
                     </button>
