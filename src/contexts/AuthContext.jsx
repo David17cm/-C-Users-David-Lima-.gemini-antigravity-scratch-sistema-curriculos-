@@ -31,11 +31,11 @@ export const AuthProvider = ({ children }) => {
 
         initAuth();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user) {
                 setLoading(true); // Bloqueia redirecionamentos até a role ser confirmada
                 setUser(session.user);
-                await fetchUserRole(session.user.id);
+                fetchUserRole(session.user.id);
             } else {
                 // SEGURANÇA HIGH-03: Remoção seletiva de chaves, não localStorage.clear()
                 localStorage.removeItem('user_role');
