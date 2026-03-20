@@ -55,7 +55,7 @@ export default function EmpresaDashboard() {
     const checkEmpresaPerfil = async () => {
         setLoading(true);
         try {
-            const { data } = await supabase.from('empresas').select('*').eq('user_id', user.id).single();
+            const { data } = await supabase.from('empresas').select('*').eq('user_id', user.id).limit(1).maybeSingle();
             if (data) { setEmpresa(data); fetchVagas(data.id); }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }

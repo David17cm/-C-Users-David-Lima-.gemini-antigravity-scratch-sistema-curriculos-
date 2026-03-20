@@ -66,13 +66,25 @@ export default function AuthPage() {
     // Redirecionamento Automático após Login/Role carregar
     const { user, role, loading: authLoading } = useAuth();
     useEffect(() => {
-        if (user && role && !authLoading) {
-            const target = ROLE_REDIRECT[role] || '/dashboard';
-            if (window.location.pathname !== target) {
-                navigate(target, { replace: true });
+        // Se temos um usuário e a carga do AuthContext finalizou
+        if (user && !authLoading) {
+            // Conta sem role configurada (Pode ocorrer se RLS falhar ou conta órfã)
+            if (role === null && isLogin) {
+                setError('Perfil de acesso não encontrado. Verifique se sua conta foi aprovada ou configurada corretamente.');
+                // Encerra sessão problemática que poderia causar redirects infinitos
+                supabase.auth.signOut();
+                setLoading(false);
+                return;
+            }
+
+            if (role) {
+                const target = ROLE_REDIRECT[role] || '/dashboard';
+                if (window.location.pathname !== target) {
+                    navigate(target, { replace: true });
+                }
             }
         }
-    }, [user, role, authLoading, navigate]);
+    }, [user, role, authLoading, navigate, isLogin]);
 
     const doLogin = async (loginEmail, loginPassword) => {
         // SEGURANÇA HIGH-01: Verifica bloqueio por tentativas excessivas
@@ -83,7 +95,6 @@ export default function AuthPage() {
 
         setLoading(true);
         setError(null);
-        // SEGURANÇA MED-01: Removido console.log com email do usuário
 
         try {
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -96,22 +107,17 @@ export default function AuthPage() {
             setLoginAttempts(0);
             setLockedUntil(null);
 
-            // Registro de Log de Acesso (Marco Civil da Internet)
+            // Registro de Log de Acesso — FIRE AND FORGET (não bloqueia o login)
             if (signInData?.user) {
-                try {
-                    const { error: logError } = await supabase.from('access_logs').insert([{
-                        user_id: signInData.user.id,
-                        email: loginEmail,
-                        action: 'login',
-                        user_agent: navigator.userAgent,
-                        accessed_at: new Date().toISOString()
-                    }]);
-                    if (logError) {
-                        console.warn('Log de acesso não registrado:', logError.message);
-                    }
-                } catch (e) {
-                    console.warn('Log de acesso não registrado:', e.message);
-                }
+                supabase.from('access_logs').insert([{
+                    user_id: signInData.user.id,
+                    email: loginEmail,
+                    action: 'login',
+                    user_agent: navigator.userAgent,
+                    accessed_at: new Date().toISOString()
+                }]).then(({ error: logError }) => {
+                    if (logError) console.warn('Log de acesso não registrado:', logError.message);
+                }).catch(() => {});
             }
 
         } catch (err) {
@@ -127,9 +133,12 @@ export default function AuthPage() {
                 const remaining = MAX_LOGIN_ATTEMPTS - newAttempts;
                 setError(`Credenciais inválidas. ${remaining} tentativa(s) restante(s).`);
             }
-            setLoading(false);
         }
+
+        // Sempre reseta loading, fora do try/catch para garantir execução
+        setLoading(false);
     };
+
 
     const handleAuth = async (e) => {
         e.preventDefault();
@@ -282,10 +291,12 @@ export default function AuthPage() {
                 <form onSubmit={handleAuth}>
                     {!isLogin && (
                         <div className="input-group">
-                            <label>Nome Completo</label>
+                            <label htmlFor="name">Nome Completo</label>
                             <div style={{ position: 'relative' }}>
                                 <User size={18} color="var(--text-muted)" style={{ position: 'absolute', top: '15px', left: '15px' }} />
                                 <input
+                                    id="name"
+                                    name="name"
                                     type="text"
                                     className="neon-input"
                                     style={{ paddingLeft: '45px' }}
@@ -299,10 +310,12 @@ export default function AuthPage() {
                     )}
 
                     <div className="input-group">
-                        <label>E-mail</label>
+                        <label htmlFor="email">E-mail</label>
                         <div style={{ position: 'relative' }}>
                             <Mail size={18} color="var(--text-muted)" style={{ position: 'absolute', top: '15px', left: '15px' }} />
                             <input
+                                id="email"
+                                name="email"
                                 type="email"
                                 className="neon-input"
                                 style={{ paddingLeft: '45px' }}
@@ -315,10 +328,12 @@ export default function AuthPage() {
                     </div>
 
                     <div className="input-group">
-                        <label>Senha de Acesso</label>
+                        <label htmlFor="password">Senha de Acesso</label>
                         <div style={{ position: 'relative' }}>
                             <Lock size={18} color="var(--text-muted)" style={{ position: 'absolute', top: '15px', left: '15px' }} />
                             <input
+                                id="password"
+                                name="password"
                                 type="password"
                                 className="neon-input"
                                 style={{ paddingLeft: '45px' }}
@@ -339,10 +354,12 @@ export default function AuthPage() {
 
                     {!isLogin && (
                         <div className="input-group">
-                            <label>Confirme sua Senha</label>
+                            <label htmlFor="confirmPassword">Confirme sua Senha</label>
                             <div style={{ position: 'relative' }}>
                                 <Lock size={18} color="var(--text-muted)" style={{ position: 'absolute', top: '15px', left: '15px' }} />
                                 <input
+                                    id="confirmPassword"
+                                    name="confirmPassword"
                                     type="password"
                                     className="neon-input"
                                     style={{ paddingLeft: '45px' }}
@@ -357,12 +374,12 @@ export default function AuthPage() {
 
                     {!isLogin && (
                         <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <label style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
-                                <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: '3px' }} />
+                            <label htmlFor="aceitouTermos" style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
+                                <input type="checkbox" id="aceitouTermos" name="aceitouTermos" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: '3px' }} />
                                 <span>Li e concordo com os <a href="/termos" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Termos de Uso</a> do sistema.</span>
                             </label>
-                            <label style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
-                                <input type="checkbox" checked={aceitouPrivacidade} onChange={e => setAceitouPrivacidade(e.target.checked)} style={{ marginTop: '3px' }} />
+                            <label htmlFor="aceitouPrivacidade" style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
+                                <input type="checkbox" id="aceitouPrivacidade" name="aceitouPrivacidade" checked={aceitouPrivacidade} onChange={e => setAceitouPrivacidade(e.target.checked)} style={{ marginTop: '3px' }} />
                                 <span>Autorizo o processamento dos meus dados conforme a <a href="/privacidade" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Política de Privacidade</a>.</span>
                             </label>
                         </div>

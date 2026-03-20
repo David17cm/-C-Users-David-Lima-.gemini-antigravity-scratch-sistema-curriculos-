@@ -120,7 +120,7 @@ export default function Dashboard() {
 
     const fetchCurriculo = async (userId) => {
         try {
-            const { data } = await supabase.from('curriculos').select('*').eq('user_id', userId).single();
+            const { data } = await supabase.from('curriculos').select('*').eq('user_id', userId).limit(1).maybeSingle();
             if (data) {
                 const cnhRaw = data.cnh || {};
                 const emRaw = data.ensino_medio || {};
