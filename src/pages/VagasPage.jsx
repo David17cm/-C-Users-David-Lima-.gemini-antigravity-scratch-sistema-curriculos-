@@ -58,7 +58,11 @@ export default function VagasPage() {
 
     const fetchVagas = async () => {
         setLoading(true);
-        const { data } = await supabase.from('vagas').select('*, empresas(razao_social)').eq('status', 'aberta').order('created_at', { ascending: false });
+        const { data } = await supabase
+            .from('vagas')
+            .select('*, empresas(razao_social, logo_url, historia, telefone, email_contato, cidade, bairro, endereco)')
+            .eq('status', 'aberta')
+            .order('created_at', { ascending: false });
         if (data) setVagas(data);
         setLoading(false);
     };
@@ -177,16 +181,24 @@ export default function VagasPage() {
                                 color: '#64748b', fontSize: '1.2rem', fontWeight: 'bold', lineHeight: 1
                             }}>✕</button>
 
-                            <h2 style={{ color: '#0f172a', marginBottom: '0.75rem', paddingRight: '3rem', fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.2 }}>
-                                {selectedVaga.titulo}
-                            </h2>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-                                <div style={{ background: 'rgba(124,58,237,0.1)', borderRadius: '6px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <Building size={14} color="var(--neon-purple)" />
-                                    <span style={{ color: '#1e293b', fontSize: '0.9rem', fontWeight: 700 }}>
-                                        {selectedVaga.empresas?.razao_social || 'Empresa Confidencial'}
-                                    </span>
+                            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                                    {selectedVaga.empresas?.logo_url ? (
+                                        <img src={selectedVaga.empresas.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    ) : (
+                                        <Building size={32} color="#94a3b8" />
+                                    )}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <h2 style={{ color: '#0f172a', margin: 0, fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.2 }}>
+                                        {selectedVaga.titulo}
+                                    </h2>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                        <Building size={14} color="var(--neon-purple)" />
+                                        <span style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600 }}>
+                                            {selectedVaga.empresas?.razao_social || 'Empresa Confidencial'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -197,11 +209,9 @@ export default function VagasPage() {
                                         🏢 {{ presencial: 'Presencial', hibrido: 'Híbrido', remoto: 'Remoto' }[selectedVaga.modalidade]}
                                     </span>
                                 )}
-                                {selectedVaga.cidade && (
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, background: '#f8fafc', color: '#475569', padding: '4px 12px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
-                                        📍 {selectedVaga.cidade}
-                                    </span>
-                                )}
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, background: '#f8fafc', color: '#475569', padding: '4px 12px', borderRadius: '20px', border: '1px solid #e2e8f0' }}>
+                                    📍 {selectedVaga.cidade || selectedVaga.empresas?.cidade || 'Não informada'}
+                                </span>
                                 {(selectedVaga.salario_min || selectedVaga.salario_max) && (
                                     <span style={{ fontSize: '0.75rem', fontWeight: 700, background: 'rgba(22,163,74,0.08)', color: '#16a34a', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(22,163,74,0.2)' }}>
                                         💰 R$ {selectedVaga.salario_min?.toLocaleString('pt-BR') || '?'} — {selectedVaga.salario_max?.toLocaleString('pt-BR') || '?'}
@@ -212,14 +222,18 @@ export default function VagasPage() {
                                         ⏳ {isVagaExpirada(selectedVaga.data_limite) ? 'Prazo Encerrado:' : 'Inscrições até:'} {new Date(selectedVaga.data_limite + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                                     </span>
                                 )}
-                                <span style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '4px 8px' }}>
-                                    Publicada em {new Date(selectedVaga.created_at).toLocaleDateString('pt-BR')}
-                                </span>
                             </div>
                         </div>
 
                         {/* Corpo do Modal */}
                         <div style={{ padding: '1.75rem 2rem' }}>
+                            {/* Sobre a Empresa (Novo) */}
+                            {selectedVaga.empresas?.historia && (
+                                <div style={{ marginBottom: '2rem', padding: '1rem', background: '#fdfaff', border: '1px solid #f3e8ff', borderRadius: '12px' }}>
+                                    <h4 style={{ color: 'var(--neon-purple)', margin: '0 0 0.5rem 0', fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase' }}>Sobre a Empresa</h4>
+                                    <p style={{ color: '#5b21b6', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>{selectedVaga.empresas.historia}</p>
+                                </div>
+                            )}
 
                             {/* Descrição */}
                             <div style={{ marginBottom: '1.5rem' }}>
@@ -231,6 +245,21 @@ export default function VagasPage() {
                                     <p style={{ color: '#334155', lineHeight: 1.8, fontSize: '0.95rem', margin: 0, whiteSpace: 'pre-line' }}>{selectedVaga.descricao || 'Nenhuma descrição fornecida.'}</p>
                                 </div>
                             </div>
+
+                            {/* Contatos e Localização (Novo) */}
+                            {(selectedVaga.empresas?.email_contato || selectedVaga.empresas?.telefone || selectedVaga.empresas?.endereco) && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+                                        <div style={{ width: '4px', height: '20px', background: '#10b981', borderRadius: '4px' }}></div>
+                                        <h4 style={{ color: '#0f172a', margin: 0, fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase' }}>Contatos e Localização</h4>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                                        {selectedVaga.empresas.email_contato && <div style={{ fontSize: '0.9rem' }}>✉ <span style={{ color: '#475569' }}>{selectedVaga.empresas.email_contato}</span></div>}
+                                        {selectedVaga.empresas.telefone && <div style={{ fontSize: '0.9rem' }}>📱 <span style={{ color: '#475569' }}>{selectedVaga.empresas.telefone}</span></div>}
+                                        {selectedVaga.empresas.endereco && <div style={{ fontSize: '0.9rem', gridColumn: '1 / -1' }}>📍 <span style={{ color: '#475569' }}>{selectedVaga.empresas.endereco}, {selectedVaga.empresas.bairro} - {selectedVaga.empresas.cidade}</span></div>}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Requisitos */}
                             {selectedVaga.requisitos && (
@@ -325,10 +354,19 @@ export default function VagasPage() {
                                 position: 'relative',
                                 overflow: 'hidden'
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
-                                    <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem', fontWeight: 800, flex: 1, letterSpacing: '-0.03em' }}>
-                                        {vaga.titulo.toUpperCase()}
-                                    </h3>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1 }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                                            {vaga.empresas?.logo_url ? (
+                                                <img src={vaga.empresas.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                            ) : (
+                                                <Building size={20} color="#94a3b8" />
+                                            )}
+                                        </div>
+                                        <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                                            {vaga.titulo.toUpperCase()}
+                                        </h3>
+                                    </div>
                                     {candidaturas.has(vaga.id) && (
                                         <span style={{
                                             fontSize: '0.65rem',

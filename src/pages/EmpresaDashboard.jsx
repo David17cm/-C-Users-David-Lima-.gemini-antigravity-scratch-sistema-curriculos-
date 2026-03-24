@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Building, LogOut, Plus, Search, FileText, Briefcase, Users, X, ExternalLink, MapPin, DollarSign, Filter, Pencil, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Building, LogOut, Plus, Search, FileText, Briefcase, Users, X, ExternalLink, MapPin, DollarSign, Filter, Pencil, CheckCircle, AlertTriangle, User, Camera, Mail, Phone, MapPinned } from 'lucide-react';
 import { TODOS_OS_CURSOS } from '../data/cursos';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import Navbar from '../components/layout/Navbar';
@@ -64,8 +64,20 @@ export default function EmpresaDashboard() {
     const [showFiltros, setShowFiltros] = useState(false);
 
     // Perfil empresa
-    const [perfilForm, setPerfilForm] = useState({ razao_social: '', cnpj: '', descricao_empresa: '' });
+    const [perfilForm, setPerfilForm] = useState({ 
+        razao_social: '', 
+        cnpj: '', 
+        descricao_empresa: '',
+        logo_url: '',
+        historia: '',
+        telefone: '',
+        email_contato: '',
+        endereco: '',
+        bairro: '',
+        cidade: ''
+    });
     const [submittingPerfil, setSubmittingPerfil] = useState(false);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
 
     // Modal candidatos
     const [modalCandidatos, setModalCandidatos] = useState(null);
@@ -86,9 +98,75 @@ export default function EmpresaDashboard() {
         setLoading(true);
         try {
             const { data } = await supabase.from('empresas').select('*').eq('user_id', user.id).limit(1).maybeSingle();
-            if (data) { setEmpresa(data); fetchVagas(data.id); }
+            if (data) { 
+                setEmpresa(data); 
+                setPerfilForm({
+                    razao_social: data.razao_social || '',
+                    cnpj: data.cnpj || '',
+                    descricao_empresa: data.descricao_empresa || '',
+                    logo_url: data.logo_url || '',
+                    historia: data.historia || '',
+                    telefone: data.telefone || '',
+                    email_contato: data.email_contato || '',
+                    endereco: data.endereco || '',
+                    bairro: data.bairro || '',
+                    cidade: data.cidade || ''
+                });
+                fetchVagas(data.id); 
+            }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
+    };
+
+    const handleUploadLogo = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        setUploadingLogo(true);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${empresa.id}-${Math.random()}.${fileExt}`;
+            const filePath = `logos/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('logos')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('logos')
+                .getPublicUrl(filePath);
+
+            setPerfilForm(prev => ({ ...prev, logo_url: publicUrl }));
+            notify('Logo carregada com sucesso!', 'success');
+        } catch (err) {
+            notify('Erro ao subir logo: ' + err.message, 'error');
+        } finally {
+            setUploadingLogo(false);
+        }
+    };
+
+    const handleSalvarPerfil = async (e) => {
+        if (e) e.preventDefault();
+        setSubmittingPerfil(true);
+        try {
+            const { data, error } = await supabase
+                .from('empresas')
+                .update(perfilForm)
+                .eq('id', empresa.id)
+                .select()
+                .single();
+            
+            if (error) throw error;
+            setEmpresa(data);
+            notify('Perfil atualizado com sucesso!', 'success');
+            setActiveTab('vagas');
+        } catch (err) {
+            notify('Erro ao salvar perfil: ' + err.message, 'error');
+        } finally {
+            setSubmittingPerfil(false);
+        }
     };
 
     const fetchVagas = async (empresaId) => {
@@ -469,6 +547,7 @@ export default function EmpresaDashboard() {
                 <div className="tabs-row" style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
                     <button onClick={() => setActiveTab('vagas')} className="neon-button secondary" style={tabStyle('vagas')}><Briefcase size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />MINHAS VAGAS</button>
                     <button onClick={() => setActiveTab('talentos')} className="neon-button secondary" style={tabStyle('talentos')}><Users size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />BUSCAR TALENTOS</button>
+                    <button onClick={() => setActiveTab('perfil')} className="neon-button secondary" style={tabStyle('perfil')}><User size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />MEU PERFIL</button>
                 </div>
 
                 {/* ===== ABA VAGAS ===== */}
@@ -709,6 +788,80 @@ export default function EmpresaDashboard() {
                             </div>
                         </div>
                     </>
+                )}
+
+                {/* ===== ABA PERFIL ===== */}
+                {activeTab === 'perfil' && (
+                    <div className="glass-panel" style={{ maxWidth: '800px', margin: '0 auto', animation: 'fadeIn 0.5s ease-out' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1.5rem' }}>
+                            <div style={{ position: 'relative' }}>
+                                <div style={{ width: '100px', height: '100px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '2px dashed rgba(0,240,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                    {perfilForm.logo_url ? (
+                                        <img src={perfilForm.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    ) : (
+                                        <Building size={40} color="var(--text-muted)" style={{ opacity: 0.3 }} />
+                                    )}
+                                </div>
+                                <label style={{ position: 'absolute', bottom: '-8px', right: '-8px', background: 'var(--neon-blue)', color: '#000', padding: '6px', borderRadius: '50%', cursor: 'pointer', display: 'flex', boxShadow: '0 0 15px var(--neon-blue)' }}>
+                                    <Camera size={16} />
+                                    <input type="file" hidden accept="image/*" onChange={handleUploadLogo} disabled={uploadingLogo} />
+                                </label>
+                            </div>
+                            <div>
+                                <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>PERSONALIZAR PERFIL</h2>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Configure como sua empresa aparece para os candidatos</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSalvarPerfil}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                                <div className="input-group">
+                                    <label>Razão Social</label>
+                                    <input className="neon-input" value={perfilForm.razao_social} onChange={e => setPerfilForm({...perfilForm, razao_social: e.target.value})} />
+                                </div>
+                                <div className="input-group">
+                                    <label>CNPJ</label>
+                                    <input className="neon-input" disabled value={perfilForm.cnpj} />
+                                </div>
+                                <div className="input-group">
+                                    <label><Mail size={14} style={{ marginRight: '6px' }}/> E-mail de Contato</label>
+                                    <input className="neon-input" type="email" value={perfilForm.email_contato} onChange={e => setPerfilForm({...perfilForm, email_contato: e.target.value})} placeholder="rh@empresa.com" />
+                                </div>
+                                <div className="input-group">
+                                    <label><Phone size={14} style={{ marginRight: '6px' }}/> Telefone/WhatsApp</label>
+                                    <input className="neon-input" value={perfilForm.telefone} onChange={e => setPerfilForm({...perfilForm, telefone: e.target.value})} placeholder="(00) 00000-0000" />
+                                </div>
+                            </div>
+
+                            <div className="input-group">
+                                <label><MapPinned size={14} style={{ marginRight: '6px' }}/> Localização</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '0.75rem' }}>
+                                    <input className="neon-input" placeholder="Endereço e Número" value={perfilForm.endereco} onChange={e => setPerfilForm({...perfilForm, endereco: e.target.value})} />
+                                    <input className="neon-input" placeholder="Bairro" value={perfilForm.bairro} onChange={e => setPerfilForm({...perfilForm, bairro: e.target.value})} />
+                                    <input className="neon-input" placeholder="Cidade" value={perfilForm.cidade} onChange={e => setPerfilForm({...perfilForm, cidade: e.target.value})} />
+                                </div>
+                            </div>
+
+                            <div className="input-group">
+                                <label>História / Missão</label>
+                                <textarea className="neon-input" style={{ minHeight: '120px' }} value={perfilForm.historia} onChange={e => setPerfilForm({...perfilForm, historia: e.target.value})} placeholder="Conte a história da empresa, missão e valores..." />
+                            </div>
+
+                            <div className="input-group">
+                                <label>Descrição Curta</label>
+                                <textarea className="neon-input" style={{ minHeight: '80px' }} value={perfilForm.descricao_empresa} onChange={e => setPerfilForm({...perfilForm, descricao_empresa: e.target.value})} placeholder="Um resumo rápido que aparece nas vagas..." />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                                <button type="submit" disabled={submittingPerfil} className="neon-button" style={{ flex: 1 }}>
+                                    {submittingPerfil ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
+                                </button>
+                                <button type="button" onClick={() => setActiveTab('vagas')} className="neon-button secondary" style={{ width: 'auto' }}>
+                                    CANCELAR
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 )}
             </div>
 
