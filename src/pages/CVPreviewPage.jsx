@@ -17,10 +17,25 @@ function calcularIdade(dataNascimento) {
 
 const LABEL_MODAL = { presencial: 'Presencial', hibrido: 'Híbrido', remoto: 'Remoto' };
 
-const parseJsonItem = (item) => {
+// Função resiliente para lidar com dados novos (objeto) e antigos (string simples)
+const parseJsonItem = (item, type = 'generic') => {
+    if (!item) return null;
+    if (typeof item === 'object') return item;
+    
+    // Se for string, tenta dar parse se parecer com JSON
     if (typeof item === 'string' && item.trim().startsWith('{')) {
-        try { return JSON.parse(item); } catch (e) { return item; }
+        try { 
+            return JSON.parse(item); 
+        } catch (e) { 
+            // fallback para string simples abixo
+        }
     }
+
+    // Se for string simples, converte em objeto compatível
+    if (type === 'curso') return { nome: item, instituicao: '', status: 'completo', observacao: '' };
+    if (type === 'experiencia') return { empresa: item, cargo: 'Não informado', atual: false, descricao: '' };
+    if (type === 'formacao') return { instituicao: item, curso: 'Não informado', status: 'completo' };
+    
     return item;
 };
 
@@ -253,7 +268,8 @@ export default function CVPreviewPage() {
                                     <h2 className="cv-header-section">Cursos Profissionalizantes</h2>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                         {cvData.cursos_prof.map((item, i) => {
-                                            const c = parseJsonItem(item);
+                                            const c = parseJsonItem(item, 'curso');
+                                            if (!c) return null;
                                             return (
                                                 <div key={i} style={{ marginBottom: '5px' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11pt', color: '#111' }}>
@@ -288,7 +304,8 @@ export default function CVPreviewPage() {
                                 <div style={{ marginBottom: '20px' }}>
                                     <h2 className="cv-header-section">Formação Acadêmica</h2>
                                     {cvData.formacoes.map((item, i) => {
-                                        const form = parseJsonItem(item);
+                                        const form = parseJsonItem(item, 'formacao');
+                                        if (!form) return null;
                                         return (
                                             <div key={i} style={{ marginBottom: '12px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11.5pt', color: '#111' }}>
@@ -312,14 +329,17 @@ export default function CVPreviewPage() {
                                 <div style={{ marginBottom: '20px' }}>
                                     <h2 className="cv-header-section">Experiência Profissional</h2>
                                     {cvData.experiencias.map((item, i) => {
-                                        const exp = parseJsonItem(item);
+                                        const exp = parseJsonItem(item, 'experiencia');
+                                        if (!exp) return null;
                                         return (
                                             <div key={i} style={{ marginBottom: '15px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11.5pt', color: '#111' }}>
                                                     <span>{exp.cargo}</span>
                                                     <span style={s.muted}>
-                                                        {exp.inicio ? new Date(exp.inicio).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : ''} —{' '}
-                                                        {exp.atual ? 'Atual' : exp.fim ? new Date(exp.fim).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : ''}
+                                                    <span style={s.muted}>
+                                                        {exp.mes_inicio && exp.ano_inicio ? `${exp.mes_inicio}/${exp.ano_inicio}` : ''} —{' '}
+                                                        {exp.atual ? 'Atual' : (exp.mes_fim && exp.ano_fim ? `${exp.mes_fim}/${exp.ano_fim}` : '')}
+                                                    </span>
                                                     </span>
                                                 </div>
                                                 <div style={{ fontSize: '10.5pt', color: '#444', fontStyle: 'italic', marginBottom: '4px' }}>{exp.empresa}</div>

@@ -254,7 +254,29 @@ export default function AuthPage() {
                 const { error: roleError } = await supabase.from('user_roles').insert([
                     { user_id: data.user.id, role: 'candidato' }
                 ]);
-                if (roleError) console.warn('Erro ao definir role:', roleError.message);
+                if (roleError) {
+                    console.error('Erro ao definir role:', roleError.message);
+                    throw new Error('Falha ao configurar perfil de acesso. Por favor, tente novamente.');
+                }
+
+                // --- LÓGICA DE INDICAÇÃO (Indique e Ganhe) ---
+                const refCode = searchParams.get('ref');
+                if (refCode) {
+                    try {
+                        const { data: donorUserId, error: rpcError } = await supabase
+                            .rpc('get_user_id_by_referral_code', { ref_code: refCode });
+                        
+                        if (donorUserId && !rpcError) {
+                            await supabase.from('indicacoes').insert([{
+                                quem_indicou: donorUserId,
+                                quem_se_cadastrou: data.user.id
+                            }]);
+                        }
+                    } catch (e) {
+                        console.warn('Erro ao registrar indicação:', e.message);
+                    }
+                }
+                // ----------------------------------------------
 
                 // Log de Consentimento LGPD
                 try {
@@ -439,11 +461,11 @@ export default function AuthPage() {
                         <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                             <label htmlFor="aceitouTermos" style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
                                 <input type="checkbox" id="aceitouTermos" name="aceitouTermos" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: '3px' }} />
-                                <span>Li e concordo com os <a href="/termos" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Termos de Uso</a> do sistema.</span>
+                                <span>Li e concordo com os <a href="/legal?doc=termos" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Termos de Uso</a> do sistema.</span>
                             </label>
                             <label htmlFor="aceitouPrivacidade" style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
                                 <input type="checkbox" id="aceitouPrivacidade" name="aceitouPrivacidade" checked={aceitouPrivacidade} onChange={e => setAceitouPrivacidade(e.target.checked)} style={{ marginTop: '3px' }} />
-                                <span>Autorizo o processamento dos meus dados conforme a <a href="/privacidade" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Política de Privacidade</a>.</span>
+                                <span>Autorizo o processamento dos meus dados conforme a <a href="/legal?doc=privacidade" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Política de Privacidade</a>.</span>
                             </label>
                         </div>
                     )}

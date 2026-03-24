@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Building, LogOut, Plus, Search, FileText, Briefcase, Users, X, ExternalLink, MapPin, DollarSign, Filter, Pencil, CheckCircle, AlertTriangle, User, Camera, Mail, Phone, MapPinned } from 'lucide-react';
+import { Building, LogOut, Plus, Search, FileText, Briefcase, Users, X, ExternalLink, MapPin, DollarSign, Filter, Pencil, CheckCircle, AlertTriangle, User, Camera, Mail, Phone, MapPinned, Gift } from 'lucide-react';
 import { TODOS_OS_CURSOS } from '../data/cursos';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import Navbar from '../components/layout/Navbar';
@@ -185,11 +185,22 @@ export default function EmpresaDashboard() {
         try {
             const { data, error: cvError } = await supabase
                 .from('curriculos')
-                .select('user_id, nome, email, telefone, cidade, bairro, data_nascimento, habilidades, cursos_prof, formacoes, ensino_medio, resumo, experiencias')
+                .select(`
+                    user_id, nome, email, telefone, cidade, bairro, data_nascimento, 
+                    habilidades, cursos_prof, formacoes, ensino_medio, resumo, experiencias,
+                    indicacoes:indicacoes!indicacoes_quem_indicou_fkey(count)
+                `)
                 .order('updated_at', { ascending: false });
 
             if (cvError) throw cvError;
-            setTalentos(data || []);
+            
+            // Transformar count em número simples
+            const formatted = (data || []).map(t => ({
+                ...t,
+                referralCount: t.indicacoes?.[0]?.count || 0
+            }));
+
+            setTalentos(formatted);
         } catch (err) {
             console.error('Erro ao buscar talentos:', err.message);
             setTalentos([]);
@@ -399,15 +410,19 @@ export default function EmpresaDashboard() {
                 if (formacaoOk) pontos += 1;
             }
 
+            // Bônus por indicações (Upgrade de Perfil) - OCULTO PARA DEPLOY
+            // const referralBonus = Math.min((t.referralCount || 0) * 5, 20); // Máximo 20% de bônus
+            const referralBonus = 0;
+            
             // A lógica de prioridade: Se há pontos distribuídos, calculamos o %, senão é 100% de match (nenhum critério ativo).
             let matchScore = 0;
             if (maxPoints > 0) {
-                matchScore = Math.round((pontos / maxPoints) * 100);
+                matchScore = Math.round((pontos / maxPoints) * 100) + referralBonus;
             } else {
-                matchScore = 100; // Sem critérios definidos, todos são visualizáveis e 100% compativeis
+                matchScore = 100 + referralBonus; 
             }
 
-            return { ...t, matchScore, completo };
+            return { ...t, matchScore, completo, referralCount: t.referralCount || 0 };
         }).filter(t => t !== null); // Remove apenas os que falharam nos filtros estritos (nome, idade)
 
         // Ordena do maior match para o menor
@@ -754,12 +769,41 @@ export default function EmpresaDashboard() {
                                                     ) : (
                                                         <span title="Perfil Incompleto" style={{ color: '#f59e0b', display: 'flex' }}><AlertTriangle size={14} /></span>
                                                     )}
+                                                    {/* TOP INDICADOR - OCULTO PARA DEPLOY
+                                                    {t.referralCount > 0 && (
+                                                        <span title={`Top Indicador - ${t.referralCount} amigo(s)`} style={{ 
+                                                            color: 'var(--neon-purple)', 
+                                                            display: 'flex', 
+                                                            background: 'rgba(181,53,246,0.1)', 
+                                                            padding: '2px 6px', 
+                                                            borderRadius: '4px', 
+                                                            fontSize: '0.65rem', 
+                                                            fontWeight: 900, 
+                                                            alignItems: 'center', 
+                                                            gap: '3px',
+                                                            border: '1px solid rgba(181,53,246,0.3)'
+                                                        }}>
+                                                            <Gift size={10} /> TOP INDICADOR
+                                                        </span>
+                                                    )}
+                                                    */}
                                                 </div>
                                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.email}</p>
                                             </td>
                                             <td style={{ padding: '1rem' }}>
-                                                {t.matchScore === 100 ? (
-                                                    <span style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🔥 100% compatível</span>
+                                                {t.matchScore >= 100 ? (
+                                                    <span style={{ 
+                                                        background: 'linear-gradient(90deg, rgba(34,197,94,0.15) 0%, rgba(124,58,237,0.15) 100%)', 
+                                                        color: '#fff', 
+                                                        padding: '4px 10px', 
+                                                        borderRadius: '12px', 
+                                                        fontSize: '0.8rem', 
+                                                        fontWeight: 'bold', 
+                                                        whiteSpace: 'nowrap',
+                                                        border: '1px solid rgba(124,58,237,0.3)'
+                                                    }}>
+                                                        🚀 Super Match {t.matchScore}%
+                                                    </span>
                                                 ) : t.matchScore >= 50 ? (
                                                     <span style={{ background: 'rgba(255,193,7,0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🟡 {t.matchScore}% compatível</span>
                                                 ) : (

@@ -8,8 +8,9 @@ import CandidateNavbar from '../components/layout/CandidateNavbar';
 
 const isVagaExpirada = (data_limite) => {
     if (!data_limite) return false;
-    // Define a data limite as 23:59:59 do dia
-    const limite = new Date(data_limite + 'T23:59:59');
+    // Define a data limite as 23:59:59 do dia no fuso local para evitar confusão
+    const [ano, mes, dia] = data_limite.split('-').map(Number);
+    const limite = new Date(ano, mes - 1, dia, 23, 59, 59);
     return new Date() > limite;
 };
 
@@ -169,10 +170,19 @@ export default function VagasPage() {
                         overflowY: 'auto',
                         position: 'relative',
                         boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
-                        border: '1px solid #e5e7eb'
+                        border: '1px solid #e5e7eb',
+                        padding: 'window.innerWidth < 768 ? "1.25rem" : "0"' // Usar padding interno responsivo
                     }}>
                         {/* Header do Modal */}
-                        <div style={{ padding: '2rem 2rem 1.5rem', borderBottom: '1px solid #f1f5f9', position: 'sticky', top: 0, background: '#fff', zIndex: 10, borderRadius: '16px 16px 0 0' }}>
+                        <div style={{ 
+                            padding: window.innerWidth < 768 ? '1.5rem 1rem 1rem' : '2rem 2rem 1.5rem', 
+                            borderBottom: '1px solid #f1f5f9', 
+                            position: 'sticky', 
+                            top: 0, 
+                            background: '#fff', 
+                            zIndex: 10, 
+                            borderRadius: '16px 16px 0 0' 
+                        }}>
                             <button onClick={() => { setSelectedVaga(null); setReportingVaga(false); }} style={{
                                 position: 'absolute', top: '1.25rem', right: '1.25rem',
                                 background: '#f1f5f9', border: 'none', borderRadius: '50%',
@@ -226,7 +236,7 @@ export default function VagasPage() {
                         </div>
 
                         {/* Corpo do Modal */}
-                        <div style={{ padding: '1.75rem 2rem' }}>
+                        <div style={{ padding: window.innerWidth < 768 ? '1rem' : '1.75rem 2rem' }}>
                             {/* Sobre a Empresa (Novo) */}
                             {selectedVaga.empresas?.historia && (
                                 <div style={{ marginBottom: '2rem', padding: '1rem', background: '#fdfaff', border: '1px solid #f3e8ff', borderRadius: '12px' }}>

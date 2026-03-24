@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Save, User, Camera, BookOpen, Tag, GraduationCap, Plus, Trash2, Briefcase, Award, AlertCircle, FileText, Brain, RefreshCw, X } from 'lucide-react';
+import { Save, User, Camera, BookOpen, Tag, GraduationCap, Plus, Trash2, Briefcase, Award, AlertCircle, FileText, Brain, RefreshCw, X, Gift, Share2, Copy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import CandidateNavbar from '../components/layout/CandidateNavbar';
@@ -10,6 +10,8 @@ const TURNOS = ['Manhã', 'Tarde', 'Noite'];
 const SEMESTRES = ['1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°'];
 const ANOS_EM = ['1° Ano', '2° Ano', '3° Ano'];
 const CNH_CATS = ['A', 'B', 'AB', 'ABD'];
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const ANOS = Array.from({ length: 40 }, (_, i) => (new Date().getFullYear() - i).toString());
 
 // Máscara de telefone: (99) 99999-9999
 function maskPhone(value) {
@@ -29,7 +31,8 @@ const EMPTY_FORM = {
     formacoes: [],
     ensino_medio: { status: '', ano_cursando: '', turno: '', ano_conclusao: '' },
     cnh: { possui: false, categorias: [] },
-    perfil_disc: ''
+    perfil_disc: '',
+    codigo_indicacao: ''
 };
 
 export default function Dashboard() {
@@ -61,7 +64,9 @@ export default function Dashboard() {
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [lastSavedData, setLastSavedData] = useState(null);
     const [autoSaving, setAutoSaving] = useState(false);
+    const isInitialLoad = useRef(true); // Bloqueia autosave até o fetch terminar
     const saveTimeoutRef = useRef(null);
+    const [referralCount, setReferralCount] = useState(0);
 
     useEffect(() => {
         if (location.state?.openDisc) {
@@ -76,49 +81,76 @@ export default function Dashboard() {
         if (user) {
             setFormData(prev => ({ ...prev, email: user.email }));
             fetchCurriculo(user.id);
+            fetchReferralCount(user.id);
         }
     }, [user]);
 
+    const fetchReferralCount = async (userId) => {
+        const { data, error } = await supabase.from('indicacoes').select('id').eq('quem_indicou', userId);
+        if (error) {
+            console.error('Erro ao contar indicações:', error);
+            return;
+        }
+        setReferralCount(data?.length || 0);
+    };
+
     // Lógica de Autosave (Debounced)
     useEffect(() => {
-        if (!user || loading || authLoading) return;
+        if (!user || loading || authLoading || isInitialLoad.current) return;
+        
+        // Evita salvamento se os dados forem idênticos ao último salvo
         if (lastSavedData && JSON.stringify(formData) === JSON.stringify(lastSavedData)) return;
+
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = setTimeout(() => {
             performAutosave();
-        }, 2000);
+        }, 3000); // 3 segundos para dar mais folga no mobile
         return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
     }, [formData]);
+
+    const preparePayload = (data) => {
+        return {
+            user_id: user.id,
+            nome: data.nome,
+            email: data.email,
+            telefone: data.telefone,
+            cidade: data.cidade,
+            endereco: data.endereco,
+            bairro: data.bairro,
+            numero: data.numero,
+            data_nascimento: data.dataNascimento,
+            resumo: data.resumo,
+            foto_url: data.foto_url,
+            habilidades: data.habilidades || [],
+            // cursos_prof é text[] no banco, salvar como string JSON se for objeto
+            cursos_prof: (data.cursos_prof || []).map(c => typeof c === 'object' ? JSON.stringify(c) : c),
+            // experiencias e formacoes são jsonb no banco, enviar como array de objetos
+            experiencias: data.experiencias || [],
+            formacoes: data.formacoes || [],
+            ensino_medio: data.ensino_medio || {},
+            cnh: data.cnh || {},
+            perfil_disc: data.perfil_disc,
+            codigo_indicacao: data.codigo_indicacao,
+            updated_at: new Date().toISOString(),
+        };
+    };
 
     const performAutosave = async () => {
         if (!user) return;
         setAutoSaving(true);
         try {
-            const payload = {
-                user_id: user.id,
-                nome: formData.nome,
-                email: formData.email,
-                telefone: formData.telefone,
-                cidade: formData.cidade,
-                endereco: formData.endereco,
-                bairro: formData.bairro,
-                numero: formData.numero,
-                data_nascimento: formData.dataNascimento,
-                resumo: formData.resumo,
-                foto_url: formData.foto_url,
-                habilidades: formData.habilidades,
-                cursos_prof: formData.cursos_prof.map(c => typeof c === 'string' ? c : JSON.stringify(c)),
-                experiencias: formData.experiencias.map(e => typeof e === 'string' ? e : JSON.stringify(e)),
-                formacoes: formData.formacoes.map(f => typeof f === 'string' ? f : JSON.stringify(f)),
-                ensino_medio: formData.ensino_medio,
-                cnh: formData.cnh,
-                perfil_disc: formData.perfil_disc,
-                updated_at: new Date().toISOString(),
-            };
-            await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
+            const payload = preparePayload(formData);
+            const { error } = await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
+            if (error) throw error;
             setLastSavedData(JSON.parse(JSON.stringify(formData)));
         } catch (err) {
-            console.warn('Autosave falhou silenciosamente:', err.message);
+            console.error('Autosave falhou técnico:', { 
+                message: err.message, 
+                code: err.code,
+                detail: err.details,
+                timestamp: new Date().toISOString(),
+                connection: navigator.onLine ? 'Online' : 'Offline'
+            });
         } finally {
             setAutoSaving(false);
         }
@@ -135,7 +167,7 @@ export default function Dashboard() {
                             try { return JSON.parse(item); } catch (e) { /* fallback below */ }
                         }
                         if (type === 'cursos') return { nome: item, instituicao: '', status: 'completo', observacao: '' };
-                        if (type === 'experiencias') return { empresa: item, cargo: '', atual: false, descricao: '' };
+                        if (type === 'experiencias') return { empresa: item, cargo: '', atual: false, descricao: '', mes_inicio: '', ano_inicio: '', mes_fim: '', ano_fim: '' };
                         if (type === 'formacoes') return { instituicao: item, curso: '', status: 'cursando' };
                     }
                     return item;
@@ -145,6 +177,17 @@ export default function Dashboard() {
             if (data) {
                 const cnhRaw = data.cnh || {};
                 const emRaw = data.ensino_medio || {};
+                let finalCode = data.codigo_indicacao;
+                
+                // Gerar código se não existir
+                if (!finalCode) {
+                    const randomSuf = Math.random().toString(36).substring(2, 6).toUpperCase();
+                    const baseName = (data.nome || 'USER').split(' ')[0].toUpperCase();
+                    finalCode = `${baseName}-${randomSuf}`;
+                    // Salva o novo código no banco
+                    await supabase.from('curriculos').update({ codigo_indicacao: finalCode }).eq('user_id', userId);
+                }
+
                 const loadedData = {
                     nome: data.nome || '',
                     dataNascimento: data.data_nascimento || '',
@@ -163,12 +206,18 @@ export default function Dashboard() {
                     ensino_medio: { status: emRaw.status || '', ano_cursando: emRaw.ano_cursando || '', turno: emRaw.turno || '', ano_conclusao: emRaw.ano_conclusao || '' },
                     cnh: { possui: cnhRaw.possui === true, categorias: Array.isArray(cnhRaw.categorias) ? cnhRaw.categorias : [] },
                     perfil_disc: data.perfil_disc || '',
+                    codigo_indicacao: finalCode
                 };
                 setFormData(loadedData);
                 setLastSavedData(JSON.parse(JSON.stringify(loadedData)));
             }
-        } catch (err) { console.error(err); }
-        finally { setLoading(false); }
+        } catch (err) { 
+            console.error('Erro ao carregar currículo:', err); 
+        } finally { 
+            setLoading(false); 
+            // Pequeno delay para garantir que o estado do React estabilizou antes de liberar o autosave
+            setTimeout(() => { isInitialLoad.current = false; }, 1000);
+        }
     };
 
     const handleFotoUpload = async (e) => {
@@ -202,33 +251,15 @@ export default function Dashboard() {
     };
 
     const handleSave = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         if (!validate()) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
         setSaving(true);
         try {
-            const payload = {
-                user_id: user.id,
-                nome: formData.nome,
-                email: formData.email,
-                telefone: formData.telefone,
-                cidade: formData.cidade,
-                endereco: formData.endereco,
-                bairro: formData.bairro,
-                numero: formData.numero,
-                data_nascimento: formData.dataNascimento,
-                resumo: formData.resumo,
-                foto_url: formData.foto_url,
-                habilidades: formData.habilidades,
-                cursos_prof: formData.cursos_prof,
-                experiencias: formData.experiencias,
-                formacoes: formData.formacoes,
-                ensino_medio: formData.ensino_medio,
-                cnh: formData.cnh,
-                perfil_disc: formData.perfil_disc,
-                updated_at: new Date().toISOString(),
-            };
-            await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
+            const payload = preparePayload(formData);
+            const { error } = await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
+            if (error) throw error;
             setToastMsg('Currículo salvo com sucesso!');
+            setLastSavedData(JSON.parse(JSON.stringify(formData)));
             setTimeout(() => setToastMsg(''), 3500);
         } catch (err) {
             setToastError(`Erro ao salvar: ${err.message}`);
@@ -315,6 +346,55 @@ export default function Dashboard() {
                         <FileText size={20} /> VER PDF
                     </button>
                 </div>
+
+                {/* --- SEÇÃO INDIQUE E GANHE (OCULTO PARA DEPLOY) --- */}
+                {/* 
+                <div className="glass-panel" style={{
+                    marginBottom: '2rem',
+                    background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(0, 240, 255, 0.05) 100%)',
+                    border: '1px solid rgba(124, 58, 237, 0.3)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                }}>
+                    <div style={{ position: 'absolute', top: '-20px', right: '-20px', opacity: 0.1 }}>
+                        <Gift size={120} color="var(--neon-purple)" />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ background: 'var(--neon-purple)', padding: '12px', borderRadius: '12px', color: '#000', display: 'flex' }}>
+                            <Share2 size={24} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: '250px' }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem', fontWeight: 900 }}>INDIQUE AMIGOS E GANHE DESTAQUE! 🎁</h3>
+                            <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                Compartilhe seu link exclusivo. Cada amigo que se cadastrar aumenta sua visibilidade para empresas.
+                            </p>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '0 1rem' }}>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--neon-purple)' }}>{referralCount}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Amigos Indicados</div>
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, background: 'rgba(0,0,0,0.3)', padding: '10px 15px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.85rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {`${window.location.origin}/auth?mode=signup&ref=${formData.codigo_indicacao}`}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/auth?mode=signup&ref=${formData.codigo_indicacao}`);
+                                setToastMsg('Link de indicação copiado! 🚀');
+                                setTimeout(() => setToastMsg(''), 3000);
+                            }}
+                            className="neon-button secondary"
+                            style={{ width: 'auto', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Copy size={16} /> COPIAR LINK
+                        </button>
+                    </div>
+                </div>
+                */}
 
                 <form onSubmit={handleSave} noValidate>
                     {/* FOTO */}
@@ -539,16 +619,49 @@ export default function Dashboard() {
                         {sectionHdr(<Briefcase size={20} />, 'EXPERIÊNCIA PROFISSIONAL', 'experiencia')}
                         {openSections.experiencia && (
                             <div>
-                                <button type="button" onClick={() => setFormData(p => ({ ...p, experiencias: [...p.experiencias, { empresa: '', cargo: '', atual: false, descricao: '' }] }))} className="neon-button secondary" style={{ width: 'auto', marginBottom: '1rem' }}><Plus size={16} /> ADICIONAR EXPERIÊNCIA</button>
+                                <button type="button" onClick={() => setFormData(p => ({ ...p, experiencias: [...p.experiencias, { empresa: '', cargo: '', atual: false, descricao: '', mes_inicio: '', ano_inicio: '', mes_fim: '', ano_fim: '' }] }))} className="neon-button secondary" style={{ width: 'auto', marginBottom: '1rem' }}><Plus size={16} /> ADICIONAR EXPERIÊNCIA</button>
                                 {formData.experiencias.map((exp, i) => (
-                                    <div key={i} className="form-item">
+                                    <div key={i} className="form-item" style={{ position: 'relative' }}>
                                         <div className="grid-form-experiencia">
                                             <div className="input-group" style={{ marginBottom: 0 }}><label>Empresa</label><input className="neon-input" value={exp.empresa} onChange={e => { const n = [...formData.experiencias]; n[i].empresa = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }} /></div>
                                             <div className="input-group" style={{ marginBottom: 0 }}><label>Cargo</label><input className="neon-input" value={exp.cargo} onChange={e => { const n = [...formData.experiencias]; n[i].cargo = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }} /></div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '42px' }}><input type="checkbox" id={`at-${i}`} checked={exp.atual} onChange={e => { const n = [...formData.experiencias]; n[i].atual = e.target.checked; setFormData(p => ({ ...p, experiencias: n })); }} /><label htmlFor={`at-${i}`} style={{ marginBottom: 0, textTransform: 'none' }}>Atual</label></div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '42px' }}><input type="checkbox" id={`at-${i}`} checked={exp.atual} onChange={e => { const n = [...formData.experiencias]; n[i].atual = e.target.checked; setFormData(p => ({ ...p, experiencias: n })); }} /><label htmlFor={`at-${i}`} style={{ marginBottom: 0, textTransform: 'none', fontWeight: 600 }}>Atual</label></div>
                                             <button type="button" onClick={() => setFormData(p => ({ ...p, experiencias: p.experiencias.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', height: '42px' }}><Trash2 size={20} /></button>
                                         </div>
-                                        <textarea className="neon-input" placeholder="Descreva suas atividades..." value={exp.descricao} onChange={e => { const n = [...formData.experiencias]; n[i].descricao = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }} />
+
+                                        <div style={{ display: 'flex', gap: '1.5rem', margin: '1rem 0', flexWrap: 'wrap' }}>
+                                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', marginBottom: '8px' }}>INÍCIO</label>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <select className="neon-input" style={{ flex: 1 }} value={exp.mes_inicio} onChange={e => { const n = [...formData.experiencias]; n[i].mes_inicio = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
+                                                        <option value="">Mês</option>
+                                                        {MESES.map(m => <option key={m} value={m}>{m}</option>)}
+                                                    </select>
+                                                    <select className="neon-input" style={{ flex: 1 }} value={exp.ano_inicio} onChange={e => { const n = [...formData.experiencias]; n[i].ano_inicio = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
+                                                        <option value="">Ano</option>
+                                                        {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {!exp.atual && (
+                                                <div style={{ flex: 1, minWidth: '200px' }}>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', marginBottom: '8px' }}>FIM</label>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <select className="neon-input" style={{ flex: 1 }} value={exp.mes_fim} onChange={e => { const n = [...formData.experiencias]; n[i].mes_fim = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
+                                                            <option value="">Mês</option>
+                                                            {MESES.map(m => <option key={m} value={m}>{m}</option>)}
+                                                        </select>
+                                                        <select className="neon-input" style={{ flex: 1 }} value={exp.ano_fim} onChange={e => { const n = [...formData.experiencias]; n[i].ano_fim = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
+                                                            <option value="">Ano</option>
+                                                            {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <textarea className="neon-input" placeholder="Descreva suas atividades..." value={exp.descricao} onChange={e => { const n = [...formData.experiencias]; n[i].descricao = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }} style={{ minHeight: '80px' }} />
                                     </div>
                                 ))}
                             </div>
@@ -615,12 +728,14 @@ export default function Dashboard() {
                     </div>
 
 
-                    {/* BOTÃO SALVAR FIXO */}
                     <div className="fab-container">
                         <button type="submit" className="neon-button" style={{ display: 'flex', gap: '10px', background: '#000', color: '#fff', boxShadow: '0 4px 15px rgba(0,0,0,0.5)', width: 'auto', padding: '15px 30px', borderRadius: '30px' }} disabled={saving}>
                             <Save size={20} /> {saving ? 'GRAVANDO...' : 'SALVAR CURRÍCULO'}
                         </button>
                     </div>
+
+                    {/* Espaçador para o FAB não cobrir conteúdo no mobile */}
+                    <div className="mobile-only-spacer" style={{ height: '120px', display: 'none' }}></div>
                 </form>
 
                 <div style={{ marginTop: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.85rem' }}>
@@ -636,6 +751,9 @@ export default function Dashboard() {
                 .avatar-preview { width: 100px; height: 100px; border-radius: 50%; overflow: hidden; border: 3px solid #7c3aed; background: #1a1a1a; display: flex; alignItems: center; justifyContent: center; flex-shrink: 0; }
                 .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
                 .alert-box { background: rgba(124,58,237,0.1); border: 1px solid var(--neon-purple); padding: 1rem; border-radius: 12px; margin-bottom: 2rem; display: flex; gap: 1rem; }
+                @media (max-width: 768px) {
+                    .mobile-only-spacer { display: block !important; }
+                }
             `}</style>
         </div>
     );

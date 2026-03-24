@@ -15,6 +15,7 @@ import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import LegalPage from './pages/LegalPage';
 import CookieBanner from './components/ui/CookieBanner';
+import TrackerWrapper from './components/layout/TrackerWrapper';
 import { AuthProvider } from './contexts/AuthContext';
 import './index.css';
 
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
       <BrowserRouter>
+        <TrackerWrapper />
         <CookieBanner />
         <Routes>
           <Route path="/" element={<LandingPage />} />
