@@ -136,13 +136,19 @@ export default function Dashboard() {
     };
 
     const performAutosave = async () => {
-        if (!user) return;
+        if (!user || loading || authLoading) return;
+        
+        // Captura o snapshot exato dos dados que vamos tentar salvar
+        const dataSnapshot = JSON.parse(JSON.stringify(formData));
         setAutoSaving(true);
+        
         try {
-            const payload = preparePayload(formData);
+            const payload = preparePayload(dataSnapshot);
             const { error } = await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
             if (error) throw error;
-            setLastSavedData(JSON.parse(JSON.stringify(formData)));
+            
+            // Só marcar como salvo se o sistema não mudou os dados no meio do caminho
+            setLastSavedData(dataSnapshot);
         } catch (err) {
             console.error('Autosave falhou técnico:', { 
                 message: err.message, 
@@ -253,13 +259,15 @@ export default function Dashboard() {
     const handleSave = async (e) => {
         if (e) e.preventDefault();
         if (!validate()) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+        
+        const dataSnapshot = JSON.parse(JSON.stringify(formData));
         setSaving(true);
         try {
-            const payload = preparePayload(formData);
+            const payload = preparePayload(dataSnapshot);
             const { error } = await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
             if (error) throw error;
             setToastMsg('Currículo salvo com sucesso!');
-            setLastSavedData(JSON.parse(JSON.stringify(formData)));
+            setLastSavedData(dataSnapshot);
             setTimeout(() => setToastMsg(''), 3500);
         } catch (err) {
             setToastError(`Erro ao salvar: ${err.message}`);
