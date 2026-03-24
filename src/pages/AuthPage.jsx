@@ -9,7 +9,7 @@ const ROLE_REDIRECT = {
     admin: '/admin',
     master: '/admin',
     empresa: '/empresa',
-    candidato: '/dashboard',
+    candidato: '/vagas',
 };
 
 // SEGURANÇA HIGH-01: Limites de tentativas de login
@@ -86,8 +86,30 @@ export default function AuthPage() {
         }
     }, [user, role, authLoading, navigate, isLogin]);
 
+    /**
+     * Retry com backoff exponencial.
+     * Tenta `maxRetries` vezes, dobrando o delay a cada falha de rede/timeout.
+     * Erros de credenciais (4xx) são lançados imediatamente, sem retry.
+     */
+    const retryWithBackoff = async (fn, maxRetries = 3, baseDelayMs = 2000) => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            } catch (err) {
+                const isNetworkError = !err.status || err.status >= 500;
+                const isLastAttempt = attempt === maxRetries;
+
+                if (!isNetworkError || isLastAttempt) throw err;
+
+                const delay = baseDelayMs * Math.pow(2, attempt - 1); // 2s, 4s, 8s...
+                setError(`Servidor lento. Tentativa ${attempt} de ${maxRetries}. Aguarde ${delay / 1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                setError(null);
+            }
+        }
+    };
+
     const doLogin = async (loginEmail, loginPassword) => {
-        // SEGURANÇA HIGH-01: Verifica bloqueio por tentativas excessivas
         if (lockedUntil && Date.now() < lockedUntil) {
             setError(`Muitas tentativas. Aguarde ${lockCountdown} segundos.`);
             return;
@@ -97,17 +119,65 @@ export default function AuthPage() {
         setError(null);
 
         try {
-            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                email: loginEmail,
-                password: loginPassword,
-            });
-            if (signInError) throw signInError;
+            let signInData = null;
 
-            // Reset tentativas após sucesso
-            setLoginAttempts(0);
-            setLockedUntil(null);
+            try {
+                // Tentativa de login com retry automático em caso de erro de rede/timeout
+                const result = await retryWithBackoff(async () => {
+                    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+                        email: loginEmail,
+                        password: loginPassword,
+                    });
 
-            // Registro de Log de Acesso — FIRE AND FORGET (não bloqueia o login)
+                    // Erro de credenciais (400) — não tentar novamente
+                    if (signInError && signInError.status === 400) throw signInError;
+                    // Erro de rede/servidor — propagar para o retry
+                    if (signInError) throw signInError;
+
+                    return data;
+                });
+                signInData = result;
+            } catch (authErr) {
+                // Se o erro NÃO for de credenciais (ex: rede), repassar para o catch externo
+                if (authErr.status !== 400) throw authErr;
+
+                // Se as credenciais forem inválidas, tentamos ver se é um CONVITE pendente
+                const { data: inviteData, error: inviteFetchError } = await supabase
+                    .from('empresa_invites')
+                    .select('*')
+                    .eq('email', loginEmail)
+                    .eq('password_temp', loginPassword)
+                    .eq('status', 'pendente')
+                    .maybeSingle();
+
+                if (!inviteFetchError && inviteData) {
+                    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+                        email: loginEmail,
+                        password: loginPassword,
+                        options: { data: { full_name: inviteData.razao_social, is_invited_company: true } }
+                    });
+
+                    if (signUpError) throw signUpError;
+
+                    if (signUpData?.user) {
+                        await supabase.from('user_roles').insert([{ user_id: signUpData.user.id, role: 'empresa' }]);
+                        await supabase.from('empresas').insert([{
+                            user_id: signUpData.user.id,
+                            razao_social: inviteData.razao_social,
+                            cnpj: inviteData.cnpj,
+                            aprovada: true
+                        }]);
+                        await supabase.from('empresa_invites').update({ status: 'concluido' }).eq('id', inviteData.id);
+                        setSuccessMessage('Acesso de parceiro ativado com sucesso! Redirecionando...');
+                        return;
+                    }
+                }
+
+                // Se não for um convite, aí sim lançamos o erro de credenciais original
+                throw authErr;
+            }
+
+            // Registro de Log de Acesso (fire-and-forget)
             if (signInData?.user) {
                 supabase.from('access_logs').insert([{
                     user_id: signInData.user.id,
@@ -115,28 +185,21 @@ export default function AuthPage() {
                     action: 'login',
                     user_agent: navigator.userAgent,
                     accessed_at: new Date().toISOString()
-                }]).then(({ error: logError }) => {
-                    if (logError) console.warn('Log de acesso não registrado:', logError.message);
-                }).catch(() => {});
+                }]).catch(() => { });
             }
 
         } catch (err) {
-            // SEGURANÇA HIGH-01: Incrementa contador de tentativas falhas
             const newAttempts = loginAttempts + 1;
             setLoginAttempts(newAttempts);
-
             if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
-                const until = Date.now() + LOCKOUT_DURATION_MS;
-                setLockedUntil(until);
-                setError(`Conta bloqueada por ${LOCKOUT_DURATION_MS / 1000}s após ${MAX_LOGIN_ATTEMPTS} tentativas falhas.`);
+                setLockedUntil(Date.now() + LOCKOUT_DURATION_MS);
+                setError(`Conta bloqueada por ${LOCKOUT_DURATION_MS / 1000}s.`);
             } else {
-                const remaining = MAX_LOGIN_ATTEMPTS - newAttempts;
-                setError(`Credenciais inválidas. ${remaining} tentativa(s) restante(s).`);
+                setError(`Credenciais inválidas. ${MAX_LOGIN_ATTEMPTS - newAttempts} tentativa(s) restante(s).`);
             }
+        } finally {
+            setLoading(false);
         }
-
-        // Sempre reseta loading, fora do try/catch para garantir execução
-        setLoading(false);
     };
 
 

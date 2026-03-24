@@ -4,7 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { Briefcase, Building, ArrowLeft, Search, X, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
-import Navbar from '../components/layout/Navbar';
+import CandidateNavbar from '../components/layout/CandidateNavbar';
+
+const isVagaExpirada = (data_limite) => {
+    if (!data_limite) return false;
+    // Define a data limite as 23:59:59 do dia
+    const limite = new Date(data_limite + 'T23:59:59');
+    return new Date() > limite;
+};
 
 export default function VagasPage() {
     const [vagas, setVagas] = useState([]);
@@ -18,6 +25,7 @@ export default function VagasPage() {
     const [reportMotive, setReportMotive] = useState('');
     const [submittingReport, setSubmittingReport] = useState(false);
     const [toast, setToast] = useState(null);
+    const [profilePhoto, setProfilePhoto] = useState(null);
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
@@ -35,8 +43,17 @@ export default function VagasPage() {
     };
 
     const checkUserCV = async () => {
-        const { data } = await supabase.from('curriculos').select('id').eq('user_id', user.id).single();
-        setHasCV(!!data);
+        try {
+            const { data } = await supabase.from('curriculos').select('id, foto_url').eq('user_id', user.id).limit(1).maybeSingle();
+            if (data) {
+                setHasCV(true);
+                setProfilePhoto(data.foto_url);
+            } else {
+                setHasCV(false);
+            }
+        } catch (err) {
+            console.error('Erro ao verificar CV:', err);
+        }
     };
 
     const fetchVagas = async () => {
@@ -53,8 +70,7 @@ export default function VagasPage() {
 
     const handleCandidatar = async (vagaId) => {
         if (!hasCV) {
-            alert('Você precisa preencher seu currículo no Dashboard antes de se candidatar.');
-            navigate('/dashboard');
+            navigate('/dashboard', { state: { alertCV: true } });
             return;
         }
         setCandidatando(true);
@@ -106,10 +122,13 @@ export default function VagasPage() {
 
     if (loading || authLoading) {
         return (
-            <div className="container" style={{ marginTop: '2rem' }}>
-                <Skeleton width="300px" height="32px" style={{ marginBottom: '1rem' }} />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
-                    <CardSkeleton /> <CardSkeleton /> <CardSkeleton />
+            <div>
+                <CandidateNavbar profilePhoto={profilePhoto} />
+                <div className="container" style={{ marginTop: '2rem' }}>
+                    <Skeleton width="300px" height="32px" style={{ marginBottom: '1rem' }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
+                        <CardSkeleton /> <CardSkeleton /> <CardSkeleton />
+                    </div>
                 </div>
             </div>
         );
@@ -120,11 +139,12 @@ export default function VagasPage() {
             {/* Toast de feedback */}
             {toast && (
                 <div style={{
-                    position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 9999,
+                    position: 'fixed', top: '1.5rem', right: '1rem', left: 'auto', zIndex: 9999,
+                    maxWidth: 'calc(100vw - 2rem)',
                     padding: '1rem 1.5rem', borderRadius: '8px', fontWeight: 600,
-                    background: toast.type === 'success' ? 'rgba(34,197,94,0.15)' : 'rgba(255,193,7,0.15)',
+                    background: toast.type === 'success' ? 'rgba(34,197,94,0.95)' : 'rgba(255,193,7,0.95)',
                     border: `1px solid ${toast.type === 'success' ? '#22c55e' : '#ffc107'}`,
-                    color: toast.type === 'success' ? '#22c55e' : '#ffc107',
+                    color: toast.type === 'success' ? '#fff' : '#000',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
                     display: 'flex', alignItems: 'center', gap: '0.5rem'
                 }}>
@@ -187,6 +207,11 @@ export default function VagasPage() {
                                         💰 R$ {selectedVaga.salario_min?.toLocaleString('pt-BR') || '?'} — {selectedVaga.salario_max?.toLocaleString('pt-BR') || '?'}
                                     </span>
                                 )}
+                                {selectedVaga.data_limite && (
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, background: isVagaExpirada(selectedVaga.data_limite) ? 'rgba(239, 68, 68, 0.08)' : 'rgba(245,158,11,0.1)', color: isVagaExpirada(selectedVaga.data_limite) ? '#ef4444' : '#f59e0b', padding: '4px 12px', borderRadius: '20px', border: `1px solid ${isVagaExpirada(selectedVaga.data_limite) ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245,158,11,0.2)'}` }}>
+                                        ⏳ {isVagaExpirada(selectedVaga.data_limite) ? 'Prazo Encerrado:' : 'Inscrições até:'} {new Date(selectedVaga.data_limite + 'T12:00:00Z').toLocaleDateString('pt-BR')}
+                                    </span>
+                                )}
                                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '4px 8px' }}>
                                     Publicada em {new Date(selectedVaga.created_at).toLocaleDateString('pt-BR')}
                                 </span>
@@ -229,6 +254,10 @@ export default function VagasPage() {
                                                 <CheckCircle size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle' }} />
                                                 CANDIDATURA ENVIADA
                                             </div>
+                                        ) : isVagaExpirada(selectedVaga.data_limite) ? (
+                                            <div style={{ textAlign: 'center', padding: '1rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', color: '#ef4444', fontWeight: 700 }}>
+                                                INSCRIÇÕES ENCERRADAS
+                                            </div>
                                         ) : (
                                             <button onClick={() => handleCandidatar(selectedVaga.id)} disabled={candidatando} className="neon-button" style={{ margin: 0, background: 'var(--neon-purple)', fontWeight: 700, fontSize: '1rem' }}>
                                                 {candidatando ? '⏳ ENVIANDO...' : '🚀 CANDIDATAR-SE'}
@@ -269,16 +298,12 @@ export default function VagasPage() {
                 </div>
             )}
 
-            <Navbar icon={<Briefcase size={24} />} title="VAGAS DISPONÍVEIS">
-                <button onClick={() => navigate('/dashboard')} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}>
-                    <ArrowLeft size={16} style={{ marginRight: '5px', display: 'inline', verticalAlign: 'middle' }} /> VOLTAR
-                </button>
-            </Navbar>
+            <CandidateNavbar profilePhoto={profilePhoto} />
 
             <div className="container" style={{ marginTop: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
                     <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>EXPLORE OPORTUNIDADES</h2>
-                    <div style={{ position: 'relative', width: '300px' }}>
+                    <div style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
                         <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '12px' }} />
                         <input className="neon-input" style={{ paddingLeft: '40px' }} placeholder="Cargo ou empresa..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                     </div>
@@ -289,7 +314,7 @@ export default function VagasPage() {
                         <p style={{ color: 'var(--text-muted)' }}>Nenhuma vaga encontrada.</p>
                     </div>
                 ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
                         {vagasFiltradas.map((vaga) => (
                             <div key={vaga.id} className="glass-panel" style={{
                                 padding: '1.75rem',
@@ -371,6 +396,19 @@ export default function VagasPage() {
                                         gap: '5px'
                                     }}>
                                         <span>💰</span> R$ {vaga.salario_min?.toLocaleString('pt-BR') || '?'} — {vaga.salario_max?.toLocaleString('pt-BR') || '?'}
+                                    </div>
+                                )}
+                                {vaga.data_limite && (
+                                    <div style={{
+                                        fontSize: '0.8rem',
+                                        color: isVagaExpirada(vaga.data_limite) ? '#ef4444' : '#f59e0b',
+                                        fontWeight: 700,
+                                        marginBottom: '1rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px'
+                                    }}>
+                                        ⏳ Inscrições até {new Date(vaga.data_limite + 'T12:00:00Z').toLocaleDateString('pt-BR')} {isVagaExpirada(vaga.data_limite) && '(Encerrado)'}
                                     </div>
                                 )}
 

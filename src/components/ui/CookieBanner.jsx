@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cookie, X, CheckCircle2 } from 'lucide-react';
+import { Cookie, CheckCircle2 } from 'lucide-react';
 
 const COOKIE_CONSENT_KEY = 'cookie_consent_status';
 
@@ -29,74 +29,103 @@ export default function CookieBanner() {
             bottom: '1.5rem',
             left: '50%',
             transform: 'translateX(-50%)',
-            width: '90%',
-            maxWidth: '720px',
+            width: '94%',
+            maxWidth: '800px',
             zIndex: 99999,
-            background: 'rgba(15, 15, 30, 0.97)',
-            border: '1px solid rgba(0, 240, 255, 0.2)',
-            borderRadius: '16px',
-            padding: '1.25rem 1.5rem',
+            background: 'rgba(10, 10, 20, 0.8)',
+            border: '1px solid rgba(0, 240, 255, 0.15)',
+            borderRadius: '24px',
+            padding: '1.25rem 2rem',
+            boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
-            gap: '1.25rem',
+            justifyContent: 'space-between',
+            gap: '1.5rem',
             flexWrap: 'wrap',
-            backdropFilter: 'blur(16px)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(0, 240, 255, 0.06)',
-            animation: 'slideUp 0.4s ease',
+            backdropFilter: 'blur(20px)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.4), 0 0 30px rgba(0, 240, 255, 0.05)',
+            animation: 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
         }}>
             <style>{`
                 @keyframes slideUp {
-                    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+                    from { opacity: 0; transform: translateX(-50%) translateY(30px); }
                     to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+                }
+                .cookie-btn-reject:hover {
+                    background: rgba(255, 255, 255, 0.05) !important;
+                    border-color: rgba(255, 255, 255, 0.3) !important;
                 }
             `}</style>
 
-            <Cookie size={28} color="var(--neon-blue)" style={{ flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1 1 300px' }}>
+                <div style={{ 
+                    background: 'rgba(0, 240, 255, 0.1)', 
+                    padding: '10px', 
+                    borderRadius: '12px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    border: '1px solid rgba(0, 240, 255, 0.2)'
+                }}>
+                    <Cookie size={24} color="#00f0ff" />
+                </div>
+                <p style={{ color: '#e2e8f0', fontSize: '0.9rem', margin: 0, lineHeight: 1.6 }}>
+                    Valorizamos sua privacidade. Utilizamos cookies para otimizar sua experiência e analisar o tráfego da plataforma.
+                    Ao continuar, você aceita nossa{' '}
+                    <a href="/privacidade" target="_blank" style={{ color: '#00f0ff', textDecoration: 'none', borderBottom: '1px solid rgba(0, 240, 255, 0.3)', fontWeight: '500' }}>
+                        Política de Privacidade
+                    </a>.
+                </p>
+            </div>
 
-            <p style={{ flex: 1, color: 'var(--text-muted)', fontSize: '0.88rem', margin: 0, lineHeight: 1.5, minWidth: '200px' }}>
-                Utilizamos cookies para melhorar sua experiência na plataforma e análise de desempenho.
-                Ao continuar, você concorda com a nossa{' '}
-                <a href="/privacidade" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>
-                    Política de Privacidade
-                </a>
-                .
-            </p>
-
-            <div style={{ display: 'flex', gap: '0.75rem', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '0.75rem', flexShrink: 0, alignItems: 'center' }}>
                 <button
                     onClick={handleReject}
+                    className="cookie-btn-reject"
                     style={{
-                        background: 'none',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        color: 'var(--text-muted)',
-                        padding: '8px 18px',
-                        borderRadius: '8px',
+                        background: 'transparent',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: '#94a3b8',
+                        padding: '10px 20px',
+                        borderRadius: '14px',
                         cursor: 'pointer',
                         fontSize: '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        transition: 'all 0.2s',
+                        fontWeight: '500',
+                        transition: 'all 0.3s ease',
                     }}
                 >
-                    <X size={14} /> Rejeitar
+                    Recusar
                 </button>
                 <button
                     onClick={handleAccept}
-                    className="neon-button"
                     style={{
-                        margin: 0,
-                        padding: '8px 20px',
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)',
+                        color: '#ffffff',
+                        border: 'none',
+                        padding: '10px 24px',
+                        borderRadius: '14px',
+                        cursor: 'pointer',
                         fontSize: '0.85rem',
-                        width: 'auto',
+                        fontWeight: '600',
+                        boxShadow: '0 4px 15px rgba(124, 58, 237, 0.3)',
+                        transition: 'all 0.3s ease',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px',
+                        gap: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(124, 58, 237, 0.5)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(124, 58, 237, 0.3)';
                     }}
                 >
-                    <CheckCircle2 size={14} /> Aceitar
+                    <CheckCircle2 size={16} /> Aceitar Tudo
                 </button>
             </div>
         </div>
     );
+
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Building, LogOut, Plus, Search, FileText, Briefcase, Users, X, ExternalLink, MapPin, DollarSign, Filter } from 'lucide-react';
+import { Building, LogOut, Plus, Search, FileText, Briefcase, Users, X, ExternalLink, MapPin, DollarSign, Filter, Pencil, CheckCircle, AlertTriangle } from 'lucide-react';
 import { TODOS_OS_CURSOS } from '../data/cursos';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import Navbar from '../components/layout/Navbar';
@@ -24,6 +24,18 @@ function calcIdade(dt) {
     return idade;
 }
 
+// Verifica se o currículo está completo
+function isCurriculoCompleto(cv) {
+    if (!cv) return false;
+    const temResumo = !!cv.resumo && cv.resumo.trim().length > 10;
+    const temExp = Array.isArray(cv.experiencias) && cv.experiencias.length > 0;
+    const temForm = Array.isArray(cv.formacoes) && cv.formacoes.length > 0;
+    const temHabilidades = Array.isArray(cv.habilidades) && cv.habilidades.length > 0;
+    const temContato = !!cv.telefone && !!cv.cidade;
+    
+    return temResumo && (temExp || cv.primeiro_emprego) && temForm && temHabilidades && temContato;
+}
+
 export default function EmpresaDashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -33,21 +45,39 @@ export default function EmpresaDashboard() {
 
     // Vagas
     const [showVagaForm, setShowVagaForm] = useState(false);
-    const [newVaga, setNewVaga] = useState({ titulo: '', descricao: '', requisitos: '', modalidade: '', cidade: '', salario_min: '', salario_max: '' });
+    const [vagaToEdit, setVagaToEdit] = useState(null);
+    const [newVaga, setNewVaga] = useState({ titulo: '', descricao: '', requisitos: '', modalidade: '', cidade: '', salario_min: '', salario_max: '', data_limite: '' });
     const [vagas, setVagas] = useState([]);
 
     // Talentos
     const [talentos, setTalentos] = useState([]);
-    const [filtros, setFiltros] = useState({ nome: '', idadeMin: '', idadeMax: '', cursos: ['', '', ''], nivelFormacao: 'Qualquer', cidade: '', habilidade: '' });
+    const [filtros, setFiltros] = useState({ 
+        nome: '', 
+        idadeMin: '', 
+        idadeMax: '', 
+        cursos: ['', '', ''], 
+        nivelFormacao: 'Qualquer', 
+        cidade: '', 
+        habilidade: '',
+        statusCurriculo: 'todos' // 'todos', 'completo', 'incompleto'
+    });
     const [showFiltros, setShowFiltros] = useState(false);
 
     // Perfil empresa
     const [perfilForm, setPerfilForm] = useState({ razao_social: '', cnpj: '', descricao_empresa: '' });
+    const [submittingPerfil, setSubmittingPerfil] = useState(false);
 
     // Modal candidatos
     const [modalCandidatos, setModalCandidatos] = useState(null);
     const [loadingCandidatos, setLoadingCandidatos] = useState(false);
     const [vagaToClose, setVagaToClose] = useState(null);
+    const [notification, setNotification] = useState(null);
+
+    // Helper para mostrar notificações
+    const notify = (message, type = 'success') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 4000);
+    };
 
     useEffect(() => { if (user) checkEmpresaPerfil(); }, [user]);
     useEffect(() => { if (activeTab === 'talentos') fetchTalentos(); }, [activeTab]);
@@ -71,43 +101,14 @@ export default function EmpresaDashboard() {
     };
 
     const fetchTalentos = async () => {
-        // SEGURANÇA CRIT-03: Empresa SÓ visualiza candidatos que se candidataram às suas vagas.
-        // Antes, esta função buscava TODOS os currículos do banco — violação de LGPD (princípio da necessidade).
-        // Agora filtra por: candidaturas → vagas da empresa → currículos correspondentes.
+        // SEGURANÇA: Empresa aprovada visualiza a base global conforme política RLS 'Visualizacao_Universal_Curriculos'
         if (!empresa?.id) return;
 
         try {
-            // 1. Buscar IDs das vagas desta empresa
-            const { data: vagasData, error: vagasError } = await supabase
-                .from('vagas')
-                .select('id')
-                .eq('empresa_id', empresa.id);
-
-            if (vagasError || !vagasData?.length) {
-                setTalentos([]);
-                return;
-            }
-
-            const vagaIds = vagasData.map(v => v.id);
-
-            // 2. Buscar user_ids únicos que se candidataram às vagas desta empresa
-            const { data: candidaturasData, error: candError } = await supabase
-                .from('candidaturas')
-                .select('user_id')
-                .in('vaga_id', vagaIds);
-
-            if (candError || !candidaturasData?.length) {
-                setTalentos([]);
-                return;
-            }
-
-            const userIds = [...new Set(candidaturasData.map(c => c.user_id))];
-
-            // 3. Buscar currículos apenas desses candidatos
             const { data, error: cvError } = await supabase
                 .from('curriculos')
-                .select('user_id, nome, email, telefone, cidade, bairro, data_nascimento, habilidades, cursos_prof, formacoes, ensino_medio')
-                .in('user_id', userIds);
+                .select('user_id, nome, email, telefone, cidade, bairro, data_nascimento, habilidades, cursos_prof, formacoes, ensino_medio, resumo, experiencias')
+                .order('updated_at', { ascending: false });
 
             if (cvError) throw cvError;
             setTalentos(data || []);
@@ -119,14 +120,81 @@ export default function EmpresaDashboard() {
 
     const handleSubmitEmpresa = async (e) => {
         e.preventDefault();
-        const { data, error } = await supabase.from('empresas').insert([{ ...perfilForm, user_id: user.id }]).select().single();
-        if (!error) { setEmpresa(data); fetchVagas(data.id); }
+        setSubmittingPerfil(true);
+        try {
+            const { data, error } = await supabase
+                .from('empresas')
+                .insert([{ ...perfilForm, user_id: user.id, aprovada: true }])
+                .select()
+                .single();
+            
+            if (error) throw error;
+            
+            if (data) { 
+                setEmpresa(data); 
+                fetchVagas(data.id); 
+            }
+        } catch (err) {
+            alert('Erro ao criar perfil: ' + err.message);
+        } finally {
+            setSubmittingPerfil(false);
+        }
     };
 
     const handlePublicarVaga = async (e) => {
         e.preventDefault();
-        const { error } = await supabase.from('vagas').insert([{ ...newVaga, empresa_id: empresa.id, status: 'aberta', salario_min: newVaga.salario_min || null, salario_max: newVaga.salario_max || null }]);
-        if (!error) { setShowVagaForm(false); setNewVaga({ titulo: '', descricao: '', requisitos: '', modalidade: '', cidade: '', salario_min: '', salario_max: '' }); fetchVagas(empresa.id); }
+        const payload = { 
+            ...newVaga, 
+            empresa_id: empresa.id, 
+            status: 'aberta', 
+            salario_min: newVaga.salario_min || null, 
+            salario_max: newVaga.salario_max || null,
+            data_limite: newVaga.data_limite || null
+        };
+
+        try {
+            if (vagaToEdit) {
+                // Modo Edição
+                const { error } = await supabase
+                    .from('vagas')
+                    .update(payload)
+                    .eq('id', vagaToEdit.id);
+                
+                if (error) throw error;
+                notify('Vaga atualizada com sucesso!', 'success');
+            } else {
+                // Modo Criação
+                const { error } = await supabase
+                    .from('vagas')
+                    .insert([payload]);
+                
+                if (error) throw error;
+                notify('Vaga publicada com sucesso!', 'success');
+            }
+
+            setShowVagaForm(false);
+            setVagaToEdit(null);
+            setNewVaga({ titulo: '', descricao: '', requisitos: '', modalidade: '', cidade: '', salario_min: '', salario_max: '', data_limite: '' });
+            fetchVagas(empresa.id);
+        } catch (err) {
+            notify('Erro: ' + err.message, 'error');
+        }
+    };
+
+    const handleEditVaga = (vaga) => {
+        setVagaToEdit(vaga);
+        setNewVaga({
+            titulo: vaga.titulo,
+            descricao: vaga.descricao,
+            requisitos: vaga.requisitos || '',
+            modalidade: vaga.modalidade || '',
+            cidade: vaga.cidade || '',
+            salario_min: vaga.salario_min || '',
+            salario_max: vaga.salario_max || '',
+            data_limite: vaga.data_limite || ''
+        });
+        setShowVagaForm(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleFecharVaga = (vagaId) => {
@@ -197,15 +265,22 @@ export default function EmpresaDashboard() {
 
     // Sistema de Match e Filtros Diretos
     const talentosComMatch = useMemo(() => {
-        let maxPontos = 0;
+        let maxPoints = 0;
 
         const cursosAtivos = filtros.cursos.filter(c => c.trim());
-        if (cursosAtivos.length > 0) maxPontos += cursosAtivos.length; // 1 pt por curso
-        if (filtros.cidade.trim()) maxPontos += 1;
-        if (filtros.habilidade.trim()) maxPontos += 1;
-        if (filtros.nivelFormacao !== 'Qualquer') maxPontos += 1;
+        if (cursosAtivos.length > 0) maxPoints += cursosAtivos.length; // 1 pt por curso
+        if (filtros.cidade.trim()) maxPoints += 1;
+        if (filtros.habilidade.trim()) maxPoints += 1;
+        if (filtros.nivelFormacao !== 'Qualquer') maxPoints += 1;
+        if (filtros.statusCurriculo !== 'todos') maxPoints += 1;
 
         const processados = talentos.map(t => {
+            const completo = isCurriculoCompleto(t);
+            
+            // Filtro restritivo de status de currículo
+            if (filtros.statusCurriculo === 'completo' && !completo) return null;
+            if (filtros.statusCurriculo === 'incompleto' && completo) return null;
+
             // Se tiver filtro de NOME ou IDADE, consideramos filtros restritivos (eliminatórios)
             const nome = filtros.nome.trim().toLowerCase();
             if (nome && !t.nome?.toLowerCase().includes(nome)) return null;
@@ -248,13 +323,13 @@ export default function EmpresaDashboard() {
 
             // A lógica de prioridade: Se há pontos distribuídos, calculamos o %, senão é 100% de match (nenhum critério ativo).
             let matchScore = 0;
-            if (maxPontos > 0) {
-                matchScore = Math.round((pontos / maxPontos) * 100);
+            if (maxPoints > 0) {
+                matchScore = Math.round((pontos / maxPoints) * 100);
             } else {
                 matchScore = 100; // Sem critérios definidos, todos são visualizáveis e 100% compativeis
             }
 
-            return { ...t, matchScore };
+            return { ...t, matchScore, completo };
         }).filter(t => t !== null); // Remove apenas os que falharam nos filtros estritos (nome, idade)
 
         // Ordena do maior match para o menor
@@ -268,7 +343,7 @@ export default function EmpresaDashboard() {
                     <Skeleton width="200px" height="32px" />
                     <Skeleton width="100px" height="40px" />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: '1.5rem' }}>
                     <CardSkeleton />
                     <CardSkeleton />
                     <CardSkeleton />
@@ -279,14 +354,32 @@ export default function EmpresaDashboard() {
 
     if (!empresa) {
         return (
-            <div className="flex-center" style={{ minHeight: '100vh' }}>
-                <div className="glass-panel" style={{ width: '100%', maxWidth: '480px' }}>
-                    <h2 style={{ color: 'var(--neon-blue)', marginBottom: '1.5rem' }}>Criar Perfil da Empresa</h2>
+            <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at top right, #0a0a0f, #000)', color: '#fff', padding: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="glass-panel" style={{ maxWidth: '450px', width: '100%', padding: '3rem', animation: 'fadeIn 0.6s ease-out' }}>
+                    <h2 style={{ color: 'var(--neon-blue)', marginBottom: '2rem', textAlign: 'center', fontWeight: 900 }}>Criar Perfil da Empresa</h2>
                     <form onSubmit={handleSubmitEmpresa}>
-                        <div className="input-group"><label>Razão Social</label><input className="neon-input" required value={perfilForm.razao_social} onChange={e => setPerfilForm({ ...perfilForm, razao_social: e.target.value })} /></div>
-                        <div className="input-group"><label>CNPJ</label><input className="neon-input" required placeholder="00.000.000/0000-00" value={perfilForm.cnpj} onChange={e => setPerfilForm({ ...perfilForm, cnpj: e.target.value })} /></div>
-                        <div className="input-group"><label>Descrição</label><textarea className="neon-input" style={{ minHeight: '80px' }} value={perfilForm.descricao_empresa} onChange={e => setPerfilForm({ ...perfilForm, descricao_empresa: e.target.value })} /></div>
-                        <button type="submit" className="neon-button">CRIAR PERFIL</button>
+                        <div className="input-group">
+                            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>RAZÃO SOCIAL</label>
+                            <input className="neon-input" required value={perfilForm.razao_social} onChange={e => setPerfilForm({ ...perfilForm, razao_social: e.target.value })} placeholder="Nome oficial da empresa" />
+                        </div>
+                        <div className="input-group">
+                            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>CNPJ</label>
+                            <input className="neon-input" required value={perfilForm.cnpj} onChange={e => setPerfilForm({ ...perfilForm, cnpj: e.target.value })} placeholder="00.000.000/0000-00" />
+                        </div>
+                        <div className="input-group">
+                            <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8' }}>DESCRIÇÃO</label>
+                            <textarea className="neon-input" required style={{ minHeight: '100px' }} value={perfilForm.descricao_empresa} onChange={e => setPerfilForm({ ...perfilForm, descricao_empresa: e.target.value })} placeholder="Fale um pouco sobre a empresa..." />
+                        </div>
+                        <button type="submit" disabled={submittingPerfil} className="neon-button" style={{ 
+                            background: 'var(--neon-purple)', 
+                            color: '#fff', 
+                            height: '56px', 
+                            fontSize: '1rem', 
+                            fontWeight: 800,
+                            marginTop: '1rem' 
+                        }}>
+                            {submittingPerfil ? 'CRIANDO PERFIL...' : 'CRIAR PERFIL'}
+                        </button>
                     </form>
                 </div>
             </div>
@@ -318,7 +411,7 @@ export default function EmpresaDashboard() {
         <div>
             {/* Modal candidatos */}
             {modalCandidatos && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
                     onClick={(e) => e.target === e.currentTarget && setModalCandidatos(null)}>
                     <div className="glass-panel" style={{ width: '100%', maxWidth: '640px', maxHeight: '82vh', overflowY: 'auto', position: 'relative' }}>
                         <button onClick={() => setModalCandidatos(null)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={24} /></button>
@@ -373,7 +466,7 @@ export default function EmpresaDashboard() {
 
             <div className="container" style={{ marginTop: '2rem' }}>
                 {/* Abas */}
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
+                <div className="tabs-row" style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem' }}>
                     <button onClick={() => setActiveTab('vagas')} className="neon-button secondary" style={tabStyle('vagas')}><Briefcase size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />MINHAS VAGAS</button>
                     <button onClick={() => setActiveTab('talentos')} className="neon-button secondary" style={tabStyle('talentos')}><Users size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />BUSCAR TALENTOS</button>
                 </div>
@@ -381,16 +474,24 @@ export default function EmpresaDashboard() {
                 {/* ===== ABA VAGAS ===== */}
                 {activeTab === 'vagas' && (
                     <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
                             <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>GERENCIAR VAGAS</h2>
                             <button onClick={() => setShowVagaForm(!showVagaForm)} className="neon-button" style={{ margin: 0, padding: '8px 20px', width: 'auto' }}><Plus size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} />NOVA VAGA</button>
                         </div>
 
                         {showVagaForm && (
-                            <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                                <h3 style={{ color: 'var(--neon-blue)', marginBottom: '1.5rem' }}>Publicar Nova Vaga</h3>
+                            <div className="glass-panel" style={{ marginBottom: '2.5rem', border: '1px solid var(--neon-blue)', animation: 'slideDown 0.4s ease-out' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                                    <h3 style={{ color: 'var(--neon-blue)', margin: 0 }}>{vagaToEdit ? 'Editar Vaga' : 'Nova Vaga'}</h3>
+                                    {vagaToEdit && (
+                                        <button onClick={() => { setShowVagaForm(false); setVagaToEdit(null); setNewVaga({ titulo: '', descricao: '', requisitos: '', modalidade: '', cidade: '', salario_min: '', salario_max: '', data_limite: '' }); }}
+                                            className="neon-button secondary" style={{ margin: 0, padding: '6px 14px', width: 'auto', fontSize: '0.8rem' }}>
+                                            CANCELAR EDIÇÃO
+                                        </button>
+                                    )}
+                                </div>
                                 <form onSubmit={handlePublicarVaga}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                                         <div className="input-group" style={{ marginBottom: 0 }}>
                                             <label>Título da Vaga *</label>
                                             <input className="neon-input" required value={newVaga.titulo} onChange={e => setNewVaga({ ...newVaga, titulo: e.target.value })} placeholder="Ex: Desenvolvedor React" />
@@ -413,6 +514,10 @@ export default function EmpresaDashboard() {
                                                 <input type="number" className="neon-input" placeholder="Máx" value={newVaga.salario_max} onChange={e => setNewVaga({ ...newVaga, salario_max: e.target.value })} style={{ flex: 1 }} />
                                             </div>
                                         </div>
+                                        <div className="input-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+                                            <label>Prazo Limite para Inscrição (Opcional)</label>
+                                            <input type="date" className="neon-input" value={newVaga.data_limite} onChange={e => setNewVaga({ ...newVaga, data_limite: e.target.value })} />
+                                        </div>
                                     </div>
                                     <div className="input-group">
                                         <label>Descrição das Atividades *</label>
@@ -422,12 +527,14 @@ export default function EmpresaDashboard() {
                                         <label>Requisitos / Diferenciais</label>
                                         <textarea className="neon-input" style={{ minHeight: '70px' }} value={newVaga.requisitos} onChange={e => setNewVaga({ ...newVaga, requisitos: e.target.value })} />
                                     </div>
-                                    <button type="submit" className="neon-button" style={{ background: 'var(--neon-blue)', color: '#000' }}>PUBLICAR</button>
+                                    <button type="submit" className="neon-button" style={{ background: 'var(--neon-blue)', color: '#000' }}>
+                                        {vagaToEdit ? 'SALVAR ALTERAÇÕES' : 'PUBLICAR'}
+                                    </button>
                                 </form>
                             </div>
                         )}
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
                             {vagas.map(vaga => (
                                 <div key={vaga.id} className="glass-panel" style={{ padding: '1.5rem', opacity: vaga.status === 'fechada' ? 0.7 : 1 }}>
                                     <h3 style={{ marginBottom: '0.5rem' }}>{vaga.titulo}</h3>
@@ -440,8 +547,13 @@ export default function EmpresaDashboard() {
                                         {vaga.cidade && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>📍 {vaga.cidade}</span>}
                                     </div>
                                     {(vaga.salario_min || vaga.salario_max) && (
-                                        <p style={{ fontSize: '0.85rem', color: '#22c55e', marginBottom: '0.75rem' }}>
+                                        <p style={{ fontSize: '0.85rem', color: '#22c55e', margin: '4px 0', fontWeight: 600 }}>
                                             💰 R$ {vaga.salario_min?.toLocaleString('pt-BR') || '?'} — {vaga.salario_max?.toLocaleString('pt-BR') || '?'}
+                                        </p>
+                                    )}
+                                    {vaga.data_limite && (
+                                        <p style={{ fontSize: '0.8rem', color: '#f59e0b', margin: '4px 0 12px 0', fontWeight: 600 }}>
+                                            ⏳ Inscrições até: {new Date(vaga.data_limite + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                                         </p>
                                     )}
                                     <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
@@ -451,8 +563,11 @@ export default function EmpresaDashboard() {
                                         <button onClick={() => handleVerCandidatos(vaga)} className="neon-button" style={{ margin: 0, padding: '8px 12px', fontSize: '0.8rem', width: 'auto', flex: 1 }}>
                                             <Users size={14} style={{ display: 'inline', marginRight: '5px', verticalAlign: 'middle' }} />CANDIDATOS
                                         </button>
+                                        <button onClick={() => handleEditVaga(vaga)} className="neon-button secondary" style={{ margin: 0, padding: '8px 12px', fontSize: '0.8rem', width: 'auto' }}>
+                                            <Pencil size={14} style={{ display: 'inline', marginRight: '5px', verticalAlign: 'middle' }} /> EDITAR
+                                        </button>
                                         <button onClick={() => handleFecharVaga(vaga.id)} disabled={vaga.status === 'fechada'} className="neon-button secondary" style={{ margin: 0, padding: '8px', fontSize: '0.8rem', width: 'auto', opacity: vaga.status === 'fechada' ? 0.5 : 1 }}>
-                                            {vaga.status === 'fechada' ? '✓ ENCERRADA' : 'FECHAR'}
+                                            {vaga.status === 'fechada' ? '✓' : 'X'}
                                         </button>
                                     </div>
                                 </div>
@@ -505,6 +620,14 @@ export default function EmpresaDashboard() {
                                         <label>Habilidade</label>
                                         <input className="neon-input" placeholder="Ex: Excel" value={filtros.habilidade} onChange={e => atualizarFiltro('habilidade', e.target.value)} />
                                     </div>
+                                    <div className="input-group" style={{ marginBottom: 0 }}>
+                                        <label>Status do Currículo</label>
+                                        <select className="neon-input" value={filtros.statusCurriculo} onChange={e => atualizarFiltro('statusCurriculo', e.target.value)}>
+                                            <option value="todos">Todos os currículos</option>
+                                            <option value="completo">Apenas Completos</option>
+                                            <option value="incompleto">Apenas Incompletos</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 {/* Até 3 cursos profissionalizantes */}
@@ -520,7 +643,7 @@ export default function EmpresaDashboard() {
                                     </div>
                                 </div>
 
-                                <button onClick={() => setFiltros({ nome: '', idadeMin: '', idadeMax: '', cursos: ['', '', ''], nivelFormacao: 'Qualquer', cidade: '', habilidade: '' })}
+                                <button onClick={() => setFiltros({ nome: '', idadeMin: '', idadeMax: '', cursos: ['', '', ''], nivelFormacao: 'Qualquer', cidade: '', habilidade: '', statusCurriculo: 'todos' })}
                                     className="neon-button secondary" style={{ margin: '1rem 0 0 0', padding: '6px 16px', width: 'auto', fontSize: '0.8rem' }}>
                                     Limpar Filtros
                                 </button>
@@ -529,7 +652,8 @@ export default function EmpresaDashboard() {
 
                         {/* Tabela de talentos */}
                         <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <div className="table-responsive">
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
                                     <tr>
                                         <th style={{ padding: '1rem' }}>Candidato</th>
@@ -544,7 +668,14 @@ export default function EmpresaDashboard() {
                                     {talentosComMatch.map(t => (
                                         <tr key={t.user_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                             <td style={{ padding: '1rem' }}>
-                                                <p style={{ fontWeight: 'bold', marginBottom: '2px' }}>{t.nome}</p>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <p style={{ fontWeight: 'bold', margin: 0 }}>{t.nome}</p>
+                                                    {t.completo ? (
+                                                        <span title="Perfil Completo" style={{ color: '#22c55e', display: 'flex' }}><CheckCircle size={14} /></span>
+                                                    ) : (
+                                                        <span title="Perfil Incompleto" style={{ color: '#f59e0b', display: 'flex' }}><AlertTriangle size={14} /></span>
+                                                    )}
+                                                </div>
                                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t.email}</p>
                                             </td>
                                             <td style={{ padding: '1rem' }}>
@@ -575,6 +706,7 @@ export default function EmpresaDashboard() {
                                     )}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </>
                 )}
@@ -597,6 +729,23 @@ export default function EmpresaDashboard() {
                             <button onClick={confirmFecharVaga} className="neon-button error" style={{ margin: 0, width: 'auto', background: 'rgba(239, 68, 68, 0.2)', color: '#ff4444', borderColor: '#ff4444' }}>SIM, FECHAR</button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* NOTIFICAÇÃO PERSONALIZADA (TOAST) */}
+            {notification && (
+                <div style={{
+                    position: 'fixed', top: '1.5rem', right: '1.5rem', left: 'auto',
+                    maxWidth: 'calc(100vw - 2rem)',
+                    background: notification.type === 'success' ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
+                    backdropFilter: 'blur(10px)', color: '#fff',
+                    padding: '1rem 1.5rem', borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    zIndex: 10000, animation: 'slideInRight 0.4s ease-out'
+                }}>
+                    {notification.type === 'success' ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
+                    <span style={{ fontWeight: 600 }}>{notification.message}</span>
                 </div>
             )}
         </div>

@@ -1,23 +1,13 @@
-// SEGURANÇA LOW-03: Serviço de integração com o Mercado Pago.
-// Esta função DEVE ser implementada como uma Edge Function no Supabase ou em um backend dedicado.
-// NUNCA coloque o Access Token do Mercado Pago no código frontend (ele viola o TOS e expõe sua conta).
+import { api } from './api';
 
 export const createPreference = async (userId, userEmail) => {
-    // SEGURANÇA: Garante que o mock nunca rode em produção
-    if (import.meta.env.PROD) {
-        throw new Error(
-            '[mercadopago.js] Integração real não implementada. ' +
-            'Crie uma Edge Function no Supabase para processar pagamentos com segurança. ' +
-            'Nunca exponha o Access Token do Mercado Pago no frontend.'
-        );
+    try {
+        const data = await api.post('/api/checkout/preference', { userId, userEmail });
+        return data;
+    } catch (error) {
+        console.error('[mercadopago.js] Erro ao criar preferência:', error);
+        throw error;
     }
-
-    // Mock apenas para desenvolvimento local
-    console.warn('[DEV ONLY] mercadopago.js: retornando preferência mockada.');
-    return {
-        id: 'PREF-123456-DEV',
-        init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=123456'
-    };
 };
 
 // === COMO IMPLEMENTAR EM PRODUÇÃO ===

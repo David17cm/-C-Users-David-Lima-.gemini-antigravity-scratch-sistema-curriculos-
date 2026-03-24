@@ -8,6 +8,7 @@ import EmpresaDashboard from './pages/EmpresaDashboard';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import CVPreviewPage from './pages/CVPreviewPage';
 import VagasPage from './pages/VagasPage';
+import MinhasCandidaturasPage from './pages/MinhasCandidaturasPage';
 import PaymentPage from './pages/PaymentPage';
 import LandingPage from './pages/LandingPage';
 import TermsPage from './pages/TermsPage';
@@ -43,9 +44,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <CVPreviewPage />
             </ProtectedRoute>
           } />
-          <Route path="/vagas" element={
+           <Route path="/vagas" element={
             <ProtectedRoute allowedRoles={['candidato']}>
               <VagasPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/minhas-candidaturas" element={
+            <ProtectedRoute allowedRoles={['candidato']}>
+              <MinhasCandidaturasPage />
             </ProtectedRoute>
           } />
           {/* <Route path="/pagamento" element={
