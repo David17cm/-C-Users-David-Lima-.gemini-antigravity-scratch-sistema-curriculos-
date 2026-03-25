@@ -11,44 +11,36 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Inicialização: Tenta carregar sessão existente imediatamente
         // SEGURANÇA CRIT-01: Role NÃO é mais lida do localStorage.
         // A fonte de verdade é sempre o banco de dados (tabela user_roles).
-        const initAuth = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    setUser(session.user);
-                    await fetchUserRole(session.user.id);
+        
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            const currentUser = session?.user || null;
+            
+            // Se o usuário mudou (ou é o primeiro carregamento)
+            if (currentUser?.id !== user?.id) {
+                setUser(currentUser);
+                
+                if (currentUser) {
+                    await fetchUserRole(currentUser.id);
                 } else {
+                    setRole(null);
+                    setPago(false);
                     setLoading(false);
                 }
-            } catch (err) {
-                console.error('Erro na inicialização da autenticação:', err.message);
-                setLoading(false);
-            }
-        };
-
-        initAuth();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session?.user) {
-                setLoading(true); // Bloqueia redirecionamentos até a role ser confirmada
-                setUser(session.user);
-                fetchUserRole(session.user.id);
-            } else {
-                // SEGURANÇA HIGH-03: Remoção seletiva de chaves, não localStorage.clear()
-                localStorage.removeItem('user_role');
-                localStorage.removeItem('user_pago');
+            } else if (event === 'SIGNED_OUT') {
                 setUser(null);
                 setRole(null);
-                setPago(false);
+                setLoading(false);
+            } else {
+                // Se o usuário é o mesmo e não é logout, apenas garantimos que loading pare
+                // (útil para eventos como TOKEN_REFRESHED que não mudam o ID)
                 setLoading(false);
             }
         });
 
         return () => subscription.unsubscribe();
-    }, []);
+    }, [user?.id]);
 
     const fetchUserRole = async (userId) => {
         setLoading(true);

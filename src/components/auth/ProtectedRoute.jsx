@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../services/supabase';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
     const { user, role, loading } = useAuth();
@@ -27,9 +28,32 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     }
 
     // SEGURANÇA CRIT-02: role=null após loading significa erro ao buscar perfil.
-    // Nunca permite acesso com role indefinida — redireciona para login.
+    // Em vez de expulsar o usuário deslogando, mostramos um aviso.
     if (!role) {
-        return <Navigate to="/auth" replace />;
+        return (
+            <div className="flex-center" style={{ color: 'var(--neon-blue)', minHeight: '100vh', padding: '2rem' }}>
+                <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.4)', padding: '2rem', borderRadius: '12px', border: '1px solid #ff4444' }}>
+                    <h3 style={{ color: '#ff4444', marginBottom: '1rem' }}>⚠️ Perfil não identificado</h3>
+                    <p style={{ color: 'var(--text-muted)', maxWidth: '400px' }}>
+                        Seu usuário está conectado, mas não conseguimos confirmar seu nível de acesso (Candidato/Admin). 
+                        Por favor, tente recarregar a página (F5).
+                    </p>
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        className="neon-button secondary" 
+                        style={{ marginTop: '1.5rem', width: 'auto' }}
+                    >
+                        🔄 RECARREGAR PÁGINA
+                    </button>
+                    <button 
+                        onClick={() => supabase.auth.signOut()} 
+                        style={{ marginTop: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'block', width: '100%', textDecoration: 'underline' }}
+                    >
+                        Sair da conta
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     // Verifica se o role do usuário está na lista de roles permitidas para esta rota

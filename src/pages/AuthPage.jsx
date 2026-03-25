@@ -71,8 +71,6 @@ export default function AuthPage() {
             // Conta sem role configurada (Pode ocorrer se RLS falhar ou conta órfã)
             if (role === null && isLogin) {
                 setError('Perfil de acesso não encontrado. Verifique se sua conta foi aprovada ou configurada corretamente.');
-                // Encerra sessão problemática que poderia causar redirects infinitos
-                supabase.auth.signOut();
                 setLoading(false);
                 return;
             }
@@ -117,6 +115,7 @@ export default function AuthPage() {
 
         setLoading(true);
         setError(null);
+        setSuccessMessage(null);
 
         try {
             let signInData = null;
@@ -316,7 +315,7 @@ export default function AuthPage() {
                     </p>
                 </div>
 
-                {error && (
+                {error ? (
                     <div style={{
                         color: '#ff4444',
                         backgroundColor: 'rgba(255, 68, 68, 0.1)',
@@ -334,25 +333,7 @@ export default function AuthPage() {
                         <AlertTriangle size={16} />
                         {error}
                     </div>
-                )}
-
-                {/* SEGURANÇA HIGH-01: Aviso de bloqueio por tentativas */}
-                {isLocked && (
-                    <div style={{
-                        backgroundColor: 'rgba(245,158,11,0.1)',
-                        border: '1px solid #f59e0b',
-                        color: '#f59e0b',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        marginBottom: '1rem',
-                        textAlign: 'center',
-                        fontSize: '0.85rem'
-                    }}>
-                        🔒 Acesso temporariamente bloqueado. Tente novamente em <strong>{lockCountdown}s</strong>.
-                    </div>
-                )}
-
-                {successMessage && (
+                ) : successMessage ? (
                     <div style={{
                         color: '#22c55e',
                         backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -370,6 +351,22 @@ export default function AuthPage() {
                     }}>
                         <CheckCircle2 size={18} />
                         {successMessage}
+                    </div>
+                ) : null}
+
+                {/* SEGURANÇA HIGH-01: Aviso de bloqueio por tentativas */}
+                {isLocked && (
+                    <div style={{
+                        backgroundColor: 'rgba(245,158,11,0.1)',
+                        border: '1px solid #f59e0b',
+                        color: '#f59e0b',
+                        padding: '10px',
+                        borderRadius: '4px',
+                        marginBottom: '1rem',
+                        textAlign: 'center',
+                        fontSize: '0.85rem'
+                    }}>
+                        🔒 Acesso temporariamente bloqueado. Tente novamente em <strong>{lockCountdown}s</strong>.
                     </div>
                 )}
 

@@ -98,14 +98,11 @@ export default function AdminDashboard() {
 
     const carregarAoVivo = async () => {
         try {
-            const agoraMenos5Min = new Date(Date.now() - 5 * 60000).toISOString();
-            const { count } = await supabase
-                .from('page_views')
-                .select('session_id', { count: 'exact', head: true })
-                .gte('created_at', agoraMenos5Min);
-            setAtivosAgora(count || 0);
+            const { data, error } = await supabase.rpc('get_active_users_count');
+            if (error) throw error;
+            setAtivosAgora(data || 0);
         } catch(err) {
-            console.error(err);
+            console.error('Erro ao buscar usuários ativos:', err);
         }
     };
 

@@ -136,7 +136,7 @@ export default function CVPreviewPage() {
                     <h3 style={{ color: 'var(--neon-purple)' }}>Nenhum currículo encontrado.</h3>
                 </div>
             ) : (
-                <div className="cv-preview-wrapper" style={{ height: (297 * scale) + 'mm' }}>
+                <div className="cv-preview-wrapper">
                     <div className="cv-container" ref={componentRef} style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}>
                         
                         <style type="text/css">
@@ -161,6 +161,7 @@ export default function CVPreviewPage() {
                                     transform: scale(${scale});
                                     transform-origin: top center;
                                     flex-shrink: 0;
+                                    margin-bottom: ${(297 * scale)}mm;
                                 }
 
                                 .cv-name {
@@ -349,10 +350,8 @@ export default function CVPreviewPage() {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11.5pt', color: '#111' }}>
                                                 <span>{exp.cargo}</span>
                                                 <span style={s.muted}>
-                                                <span style={s.muted}>
                                                     {exp.mes_inicio && exp.ano_inicio ? `${exp.mes_inicio}/${exp.ano_inicio}` : ''} —{' '}
                                                     {exp.atual ? 'Atual' : (exp.mes_fim && exp.ano_fim ? `${exp.mes_fim}/${exp.ano_fim}` : '')}
-                                                </span>
                                                 </span>
                                             </div>
                                             <div style={{ fontSize: '10.5pt', color: '#444', fontStyle: 'italic', marginBottom: '4px' }}>{exp.empresa}</div>
