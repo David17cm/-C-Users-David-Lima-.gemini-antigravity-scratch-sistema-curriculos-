@@ -119,12 +119,13 @@ export default function AuthPage() {
 
         try {
             let signInData = null;
+            const cleanEmail = loginEmail.trim();
 
             try {
                 // Tentativa de login com retry automático em caso de erro de rede/timeout
                 const result = await retryWithBackoff(async () => {
                     const { data, error: signInError } = await supabase.auth.signInWithPassword({
-                        email: loginEmail,
+                        email: cleanEmail,
                         password: loginPassword,
                     });
 
@@ -144,7 +145,7 @@ export default function AuthPage() {
                 const { data: inviteData, error: inviteFetchError } = await supabase
                     .from('empresa_invites')
                     .select('*')
-                    .eq('email', loginEmail)
+                    .eq('email', cleanEmail)
                     .eq('password_temp', loginPassword)
                     .eq('status', 'pendente')
                     .maybeSingle();
