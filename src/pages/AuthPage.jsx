@@ -138,6 +138,7 @@ export default function AuthPage() {
                 });
                 signInData = result;
             } catch (authErr) {
+                console.error('Erro detalhado de Login:', authErr);
                 // Se o erro NÃO for de credenciais (ex: rede), repassar para o catch externo
                 if (authErr.status !== 400) throw authErr;
 
@@ -215,6 +216,7 @@ export default function AuthPage() {
     const handleSignup = async () => {
         setLoading(true);
         setError(null);
+        const cleanEmail = email.trim();
 
         // SEGURANÇA MED-02: Validação de formato de email
         if (!EMAIL_REGEX.test(email)) {
@@ -244,7 +246,7 @@ export default function AuthPage() {
 
         try {
             const { data, error: signUpError } = await supabase.auth.signUp({
-                email,
+                email: cleanEmail,
                 password,
                 options: { data: { full_name: name } }
             });
@@ -282,7 +284,7 @@ export default function AuthPage() {
                 try {
                     await supabase.from('consent_logs').insert([{
                         user_id: data.user.id,
-                        email: email,
+                        email: cleanEmail,
                         accepted_terms: aceitouTermos,
                         accepted_privacy: aceitouPrivacidade,
                         ip_address: null, // preenchido pelo servidor via Edge Function
@@ -332,7 +334,27 @@ export default function AuthPage() {
                         gap: '8px'
                     }}>
                         <AlertTriangle size={16} />
-                        {error}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span>{error}</span>
+                            <button 
+                                onClick={() => {
+                                    localStorage.clear();
+                                    sessionStorage.clear();
+                                    window.location.reload();
+                                }}
+                                style={{ 
+                                    fontSize: '0.75rem', 
+                                    textDecoration: 'underline', 
+                                    background: 'none', 
+                                    border: 'none', 
+                                    color: 'inherit', 
+                                    cursor: 'pointer',
+                                    padding: 0
+                                }}
+                            >
+                                Limpar cache e tentar novamente
+                            </button>
+                        </div>
                     </div>
                 ) : successMessage ? (
                     <div style={{
