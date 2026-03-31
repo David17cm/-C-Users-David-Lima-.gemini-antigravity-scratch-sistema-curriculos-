@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Save, User, Camera, BookOpen, Tag, GraduationCap, Plus, Trash2, Briefcase, Award, AlertCircle, FileText, Brain, RefreshCw, X, Gift, Share2, Copy } from 'lucide-react';
+import { Save, User, Camera, BookOpen, Tag, GraduationCap, Plus, Trash2, Briefcase, Award, AlertCircle, FileText, Brain, RefreshCw, X, Gift, Share2, Copy, Compass } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import CandidateNavbar from '../components/layout/CandidateNavbar';
@@ -22,7 +22,7 @@ function maskPhone(value) {
 }
 
 const EMPTY_FORM = {
-    nome: '', dataNascimento: '', email: '', telefone: '', cidade: '', resumo: '',
+    nome: '', dataNascimento: '', genero: '', email: '', telefone: '', cidade: '', resumo: '',
     endereco: '', bairro: '', numero: '',
     foto_url: '',
     habilidades: [],
@@ -119,6 +119,7 @@ export default function Dashboard() {
             bairro: data.bairro,
             numero: data.numero,
             data_nascimento: data.dataNascimento,
+            genero: data.genero,
             resumo: data.resumo,
             foto_url: data.foto_url,
             habilidades: data.habilidades || [],
@@ -197,6 +198,7 @@ export default function Dashboard() {
                 const loadedData = {
                     nome: data.nome || '',
                     dataNascimento: data.data_nascimento || '',
+                    genero: data.genero || '',
                     email: data.email || '',
                     telefone: data.telefone || '',
                     cidade: data.cidade || '',
@@ -249,6 +251,7 @@ export default function Dashboard() {
         const e = {};
         if (!formData.nome.trim()) e.nome = 'Nome obrigatório';
         if (!formData.dataNascimento) e.dataNascimento = 'Data obrigatória';
+        if (!formData.genero) e.genero = 'Gênero obrigatório';
         if (!formData.email.trim()) e.email = 'E-mail obrigatório';
         if (!formData.telefone.trim()) e.telefone = 'Telefone obrigatório';
         if (!formData.bairro.trim()) e.bairro = 'Bairro obrigatório';
@@ -283,7 +286,7 @@ export default function Dashboard() {
             onClick={() => sectionKey ? toggleSection(sectionKey) : null}
             style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                color: '#7c3aed', borderBottom: '1px solid #e5e7eb',
+                color: 'var(--norte-dark-green)', borderBottom: '1px solid #e5e7eb',
                 paddingBottom: '10px', marginBottom: (sectionKey && !openSections[sectionKey]) ? '0' : '20px',
                 cursor: sectionKey ? 'pointer' : 'default', userSelect: 'none'
             }}
@@ -337,7 +340,7 @@ export default function Dashboard() {
             <div className="container" style={{ marginTop: '2rem' }}>
                 {location.state?.alertCV && (
                     <div className="alert-box">
-                        <AlertCircle size={24} color="var(--neon-purple)" />
+                        <AlertCircle size={24} color="var(--norte-green)" />
                         <div>
                             <strong>Currículo Incompleto</strong>
                             <p>Você precisa preencher o seu currículo antes de candidatar.</p>
@@ -443,6 +446,16 @@ export default function Dashboard() {
                                     <label>Data de Nascimento *</label>
                                     <input {...inp('dataNascimento')} type="date" style={{ colorScheme: 'dark' }} value={formData.dataNascimento} onChange={e => setFormData(p => ({ ...p, dataNascimento: e.target.value }))} />
                                     {errMsg('dataNascimento')}
+                                </div>
+                                <div className="input-group">
+                                    <label>Gênero *</label>
+                                    <select {...inp('genero')} style={{ colorScheme: 'dark' }} value={formData.genero} onChange={e => setFormData(p => ({ ...p, genero: e.target.value }))}>
+                                        <option value="">Selecione...</option>
+                                        <option value="Masculino">Masculino</option>
+                                        <option value="Feminino">Feminino</option>
+                                        <option value="Prefiro não dizer">Prefiro não dizer</option>
+                                    </select>
+                                    {errMsg('genero')}
                                 </div>
                                 <div className="input-group">
                                     <label>Bairro *</label>
@@ -683,7 +696,7 @@ export default function Dashboard() {
                             <div style={{ padding: '10px 0' }}>
                                 {!formData.perfil_disc || !formData.perfil_disc.startsWith('{') ? (
                                     <div style={{ textAlign: 'center', padding: '2rem' }}>
-                                        <div style={{ display: 'inline-flex', padding: '15px', background: 'rgba(124,58,237,0.1)', borderRadius: '50%', marginBottom: '1.5rem', color: 'var(--neon-purple)' }}>
+                                        <div style={{ display: 'inline-flex', padding: '15px', background: 'rgba(0,141,76,0.1)', borderRadius: '50%', marginBottom: '1.5rem', color: 'var(--norte-green)' }}>
                                             <Brain size={40} />
                                         </div>
                                         <h4 style={{ fontSize: '1.3rem', fontWeight: 900, marginBottom: '1rem' }}>DESCUBRA SEU PERFIL</h4>
@@ -701,10 +714,10 @@ export default function Dashboard() {
 
                                     return (
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', alignItems: 'center' }}>
-                                            <div style={{ textAlign: 'center', padding: '2rem', background: 'rgba(124,58,237,0.05)', borderRadius: '15px' }}>
+                                            <div style={{ textAlign: 'center', padding: '2rem', background: 'rgba(0,141,76,0.05)', borderRadius: '15px', border: '1px solid rgba(0,141,76,0.1)' }}>
                                                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px', fontWeight: 700 }}>Perfil Dominante</p>
-                                                <h4 style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--neon-purple)', margin: 0 }}>{dominant.toUpperCase()}</h4>
-                                                <button type="button" onClick={() => setShowDiscQuiz(true)} style={{ marginTop: '1.5rem', background: 'none', border: 'none', color: 'var(--neon-blue)', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px', marginInline: 'auto' }}>
+                                                <h4 style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--norte-dark-green)', margin: 0 }}>{dominant.toUpperCase()}</h4>
+                                                <button type="button" onClick={() => setShowDiscQuiz(true)} style={{ marginTop: '1.5rem', background: 'none', border: 'none', color: 'var(--norte-green)', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px', marginInline: 'auto' }}>
                                                     <RefreshCw size={14} /> REFAZER TESTE
                                                 </button>
                                             </div>
@@ -714,14 +727,14 @@ export default function Dashboard() {
                                                     <div key={type}>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem', fontWeight: 800 }}>
                                                             <span>{type}</span>
-                                                            <span style={{ color: value > 40 ? 'var(--neon-purple)' : 'var(--text-muted)' }}>{value}%</span>
+                                                            <span style={{ color: value > 40 ? 'var(--norte-green)' : 'var(--text-muted)' }}>{value}%</span>
                                                         </div>
                                                         <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
                                                             <div style={{ 
                                                                 width: `${value}%`, 
                                                                 height: '100%', 
-                                                                background: type === dominant ? 'var(--neon-purple)' : 'rgba(255,255,255,0.2)',
-                                                                boxShadow: type === dominant ? '0 0 10px rgba(124,58,237,0.5)' : 'none',
+                                                                background: type === dominant ? 'var(--norte-green)' : 'rgba(0,141,76,0.1)',
+                                                                boxShadow: type === dominant ? '0 0 10px rgba(0,141,76,0.3)' : 'none',
                                                                 transition: 'width 1s ease-out' 
                                                             }} />
                                                         </div>
@@ -747,7 +760,7 @@ export default function Dashboard() {
                 </form>
 
                 <div style={{ marginTop: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.85rem' }}>
-                    <p>© 2026 Talentos Futuro do Trabalho - Todos os direitos reservados</p>
+                    <p>© 2026 Norte Empregos - Todos os direitos reservados</p>
                 </div>
             </div>
 
@@ -756,9 +769,9 @@ export default function Dashboard() {
                 .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; borderRadius: 8px; zIndex: 9999; fontWeight: bold; animation: fadeIn 0.3s ease; }
                 .toast.success { background: #22c55e; color: #fff; }
                 .toast.error { background: #ef4444; color: #fff; }
-                .avatar-preview { width: 100px; height: 100px; border-radius: 50%; overflow: hidden; border: 3px solid #7c3aed; background: #1a1a1a; display: flex; alignItems: center; justifyContent: center; flex-shrink: 0; }
+                .avatar-preview { width: 100px; height: 100px; border-radius: 50%; overflow: hidden; border: 3px solid var(--norte-green); background: #f0fdf4; display: flex; alignItems: center; justifyContent: center; flex-shrink: 0; }
                 .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
-                .alert-box { background: rgba(124,58,237,0.1); border: 1px solid var(--neon-purple); padding: 1rem; border-radius: 12px; margin-bottom: 2rem; display: flex; gap: 1rem; }
+                .alert-box { background: rgba(0,141,76,0.05); border: 1px solid var(--norte-green); padding: 1rem; border-radius: 12px; margin-bottom: 2rem; display: flex; gap: 1rem; }
                 @media (max-width: 768px) {
                     .mobile-only-spacer { display: block !important; }
                 }

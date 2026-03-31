@@ -176,7 +176,7 @@ export default function CVPreviewPage() {
                                     font-size: 13pt;
                                     color: #111;
                                     text-transform: uppercase;
-                                    border-bottom: 2px solid #7c3aed;
+                                    border-bottom: 2px solid var(--norte-green);
                                     padding-bottom: 5px;
                                     margin-bottom: 12px;
                                 }
@@ -198,7 +198,7 @@ export default function CVPreviewPage() {
 
                         <div style={{ borderBottom: '2px solid #2c3e50', paddingBottom: '1.5rem', marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                             {cvData.foto_url && (
-                                <img src={cvData.foto_url} alt="Foto" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #7c3aed' }} />
+                                <img src={cvData.foto_url} alt="Foto" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--norte-green)' }} />
                             )}
                             <div style={{ width: '100%', textAlign: 'center' }}>
                                 <h1 className="cv-name">
@@ -206,6 +206,7 @@ export default function CVPreviewPage() {
                                 </h1>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.75rem 1.5rem', color: '#555', fontSize: '0.9rem' }}>
                                     {cvData.data_nascimento && <span>🎂 {calcularIdade(cvData.data_nascimento)} anos</span>}
+                                    {cvData.genero && <span>👤 {cvData.genero}</span>}
                                     {cvData.bairro && <span>📍 {cvData.bairro}{cvData.cidade ? ` - ${cvData.cidade}` : ''}</span>}
                                     {!cvData.bairro && cvData.cidade && <span>📍 {cvData.cidade}</span>}
                                     {cvData.email && <span>✉ {cvData.email}</span>}
@@ -225,7 +226,7 @@ export default function CVPreviewPage() {
                                                     if (sorted.length > 0 && sorted[0][0]) {
                                                         return (
                                                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                                                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase' }}>
+                                                                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--norte-dark-green)', textTransform: 'uppercase' }}>
                                                                     🚀 {sorted[0][0]}
                                                                 </span>
                                                                 <div style={{ display: 'flex', gap: '8px', fontSize: '0.6rem', fontWeight: 700, color: '#666' }}>
@@ -241,7 +242,7 @@ export default function CVPreviewPage() {
                                                 const textVal = typeof cvData.perfil_disc === 'string' ? cvData.perfil_disc : 'N/A';
                                                 if (textVal && textVal !== 'N/A' && !textVal.startsWith('{')) {
                                                     return (
-                                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, background: 'rgba(124,58,237,0.1)', color: '#7c3aed', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(124,58,237,0.2)', textTransform: 'uppercase' }}>
+                                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, background: 'rgba(0, 141, 76, 0.1)', color: 'var(--norte-green)', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(0, 141, 76, 0.2)', textTransform: 'uppercase' }}>
                                                             🌟 PERFIL DISC: {textVal}
                                                         </span>
                                                     );

@@ -2,7 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Building, LogOut, Plus, Search, FileText, Briefcase, Users, X, ExternalLink, MapPin, DollarSign, Filter, Pencil, CheckCircle, AlertTriangle, User, Camera, Mail, Phone, MapPinned, Gift } from 'lucide-react';
+import { 
+    Users, Briefcase, Plus, LogOut, CheckCircle, Clock,
+    Building, Search, XCircle, ExternalLink, User,
+    ChevronDown, Trash2, Edit, Save, AlertTriangle, Compass,
+    FileText, X, MapPin, DollarSign, Filter, Pencil, Camera, Mail, Phone, MapPinned, Gift, Download
+} from 'lucide-react';
 import { TODOS_OS_CURSOS } from '../data/cursos';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import Navbar from '../components/layout/Navbar';
@@ -11,8 +16,38 @@ const MODALIDADES = ['presencial', 'hibrido', 'remoto'];
 const LABEL_MODAL = { presencial: 'Presencial', hibrido: 'Híbrido', remoto: 'Remoto' };
 const STATUS_CAND = ['pendente', 'em_analise', 'aprovado', 'recusado'];
 const LABEL_STATUS = { pendente: '⏳ Pendente', em_analise: '🔍 Em análise', aprovado: '✅ Aprovado', recusado: '❌ Recusado' };
-const COR_STATUS = { pendente: 'rgba(255,193,7,0.15)', em_analise: 'rgba(0,240,255,0.1)', aprovado: 'rgba(34,197,94,0.15)', recusado: 'rgba(255,68,68,0.15)' };
-const NIVEL_FORM = ['Qualquer', 'Superior Cursando', 'Superior Completo', 'Ensino Médio'];
+const COR_STATUS = { pendente: 'rgba(235,191,33,0.15)', em_analise: 'rgba(67,141,121,0.1)', aprovado: 'rgba(0,141,76,0.15)', recusado: 'rgba(239,68,68,0.15)' };
+const DISC_PERFIS = [
+    { value: '', label: 'Qualquer Perfil' },
+    { value: 'D', label: '🔴 Dominante (D) — Executor' },
+    { value: 'I', label: '🟡 Influente (I) — Comunicador' },
+    { value: 'S', label: '🟢 Estável (S) — Planejador' },
+    { value: 'C', label: '🔵 Analítico (C) — Detalhista' },
+];
+
+// Mapeamento do perfil DISC retornado pelo Quiz para a letra do filtro
+function getDiscDominante(rawDisc) {
+    if (!rawDisc) return null;
+    try {
+        const discData = typeof rawDisc === 'string' && rawDisc.startsWith('{') 
+            ? JSON.parse(rawDisc) 
+            : (typeof rawDisc === 'object' ? rawDisc : null);
+            
+        if (discData && Object.keys(discData).length > 0) {
+            // Encontra qual tem a maior %
+            const sorted = Object.entries(discData).sort((a,b) => b[1] - a[1]);
+            const dominanteStr = sorted[0][0]; // "Executor", "Comunicador", "Planejador", "Analista"
+            
+            if (dominanteStr === 'Executor') return 'D';
+            if (dominanteStr === 'Comunicador') return 'I';
+            if (dominanteStr === 'Planejador') return 'S';
+            if (dominanteStr === 'Analista') return 'C';
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
 
 // Calcula idade a partir de data_nascimento
 function calcIdade(dt) {
@@ -37,7 +72,7 @@ function isCurriculoCompleto(cv) {
 }
 
 export default function EmpresaDashboard() {
-    const { user } = useAuth();
+    const { user, signOut } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [empresa, setEmpresa] = useState(null);
@@ -56,11 +91,17 @@ export default function EmpresaDashboard() {
         idadeMin: '', 
         idadeMax: '', 
         cursos: ['', '', ''], 
-        nivelFormacao: 'Qualquer', 
+        ensinoMedio: '',       // '', 'completo', 'cursando', 'incompleto'
+        ensinoSuperior: '',    // '', 'completo', 'cursando'
+        cursoSuperior: '',     // texto livre (nome do curso)
+        perfilDisc: '',        // '', 'D', 'I', 'S', 'C'
         cidade: '', 
         habilidade: '',
-        statusCurriculo: 'todos' // 'todos', 'completo', 'incompleto'
+        statusCurriculo: 'todos',
+        genero: ''
     });
+    const [selecionados, setSelecionados] = useState(new Set());
+    const [gerandoPdf, setGerandoPdf] = useState(false);
     const [showFiltros, setShowFiltros] = useState(false);
 
     // Perfil empresa
@@ -186,15 +227,14 @@ export default function EmpresaDashboard() {
             const { data, error: cvError } = await supabase
                 .from('curriculos')
                 .select(`
-                    user_id, nome, email, telefone, cidade, bairro, data_nascimento, 
+                    user_id, nome, email, telefone, cidade, bairro, data_nascimento, genero,
                     habilidades, cursos_prof, formacoes, ensino_medio, resumo, experiencias,
-                    indicacoes:indicacoes!indicacoes_quem_indicou_fkey(count)
+                    perfil_disc
                 `)
                 .order('updated_at', { ascending: false });
 
             if (cvError) throw cvError;
             
-            // Transformar count em número simples
             const formatted = (data || []).map(t => ({
                 ...t,
                 referralCount: t.indicacoes?.[0]?.count || 0
@@ -204,6 +244,188 @@ export default function EmpresaDashboard() {
         } catch (err) {
             console.error('Erro ao buscar talentos:', err.message);
             setTalentos([]);
+        }
+    };
+
+    // --- Seleção para download em lote ---
+    const toggleSelecionado = (userId) => {
+        setSelecionados(prev => {
+            const next = new Set(prev);
+            if (next.has(userId)) next.delete(userId);
+            else next.add(userId);
+            return next;
+        });
+    };
+
+    const toggleTodos = (lista) => {
+        if (selecionados.size === lista.length) {
+            setSelecionados(new Set());
+        } else {
+            setSelecionados(new Set(lista.map(t => t.user_id)));
+        }
+    };
+
+    // --- Download em Lote (PDF) ---
+    const handleDownloadBatch = async (lista) => {
+        if (lista.length === 0) {
+            alert('Selecione ao menos um candidato para baixar.');
+            return;
+        }
+        setGerandoPdf(true);
+        try {
+            const { jsPDF } = await import('jspdf');
+            const html2canvas = (await import('html2canvas')).default;
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pageW = 210;
+            const pageH = 297;
+
+            // Container invisível para renderização do currículo
+            const container = document.createElement('div');
+            container.style.position = 'absolute';
+            container.style.top = '-10000px';
+            container.style.left = '-10000px';
+            container.style.width = '793px'; // A4 width at 96dpi aprox
+            document.body.appendChild(container);
+
+            for (let i = 0; i < lista.length; i++) {
+                const cvData = lista[i];
+                if (i > 0) doc.addPage();
+
+                // Helper local para idade
+                let idadeLabel = '';
+                const idade = calcIdade(cvData.data_nascimento);
+                if (idade !== null) idadeLabel = `🎂 ${idade} anos`;
+
+                const infoStr = [
+                    idadeLabel,
+                    cvData.genero ? `👤 ${cvData.genero}` : '',
+                    cvData.cidade ? `📍 ${cvData.bairro ? cvData.bairro + ' - ' : ''}${cvData.cidade}` : '',
+                    cvData.email ? `✉ ${cvData.email}` : '',
+                    cvData.telefone ? `📱 ${cvData.telefone}` : ''
+                ].filter(Boolean).join(' | ');
+
+                let discHtml = '';
+                if (cvData.perfil_disc) {
+                    try {
+                        const disc = typeof cvData.perfil_disc === 'string' && cvData.perfil_disc.startsWith('{') 
+                            ? JSON.parse(cvData.perfil_disc) : null;
+                        if (disc) {
+                            const sorted = Object.entries(disc).sort((a,b) => b[1] - a[1]);
+                            if (sorted.length > 0) {
+                                discHtml = `
+                                    <div style="margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                        <span style="font-size: 14px; font-weight: bold; color: #7c3aed; text-transform: uppercase;">🚀 ${sorted[0][0]}</span>
+                                        <div style="display: flex; gap: 10px; font-size: 11px; font-weight: bold; color: #666;">
+                                            ${sorted.map(([k, v]) => `<span>${k.substring(0,3).toUpperCase()}: ${v}%</span>`).join('')}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        } else {
+                            discHtml = `<span style="font-size: 12px; font-weight: bold; background: rgba(124,58,237,0.1); color: #7c3aed; padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(124,58,237,0.2);">🌟 PERFIL DISC: ${cvData.perfil_disc}</span>`;
+                        }
+                    } catch(e) {}
+                }
+
+                const exps = Array.isArray(cvData.experiencias) ? cvData.experiencias : [];
+                const expHtml = exps.map(exp => {
+                    const ini = [exp.mes_inicio, exp.ano_inicio].filter(Boolean).join('/');
+                    const fim = exp.atual ? 'Atual' : [exp.mes_fim, exp.ano_fim].filter(Boolean).join('/');
+                    return `
+                        <div style="margin-bottom: 12px;">
+                            <h4 style="margin: 0; color: #1f2937; font-size: 15px;">${exp.cargo || ''}</h4>
+                            <span style="color: #7c3aed; font-size: 13px; font-weight: 600;">${exp.empresa || ''}</span>
+                            <span style="color: #6b7280; font-size: 13px; margin-left: 10px;">(${ini} - ${fim})</span>
+                            <p style="margin: 5px 0 0 0; font-size: 13px; color: #4b5563;">${exp.descricao || ''}</p>
+                        </div>
+                    `;
+                }).join('');
+
+                const formacoes = Array.isArray(cvData.formacoes) ? cvData.formacoes : [];
+                const emHtml = cvData.ensino_medio?.status ? `
+                    <div style="margin-bottom: 8px;">
+                        <span style="color: #1f2937; font-weight: bold; font-size: 14px;">Ensino Médio (${cvData.ensino_medio.status})</span>
+                    </div>
+                ` : '';
+                const formHtml = formacoes.map(f => `
+                    <div style="margin-bottom: 8px;">
+                        <h4 style="margin: 0; color: #1f2937; font-size: 15px;">${f.curso || ''}</h4>
+                        <span style="color: #6b7280; font-size: 13px;">${f.instituicao || ''} - ${f.status || ''}</span>
+                    </div>
+                `).join('');
+
+                const habHtml = (cvData.habilidades || []).map(h => `
+                    <span style="background: rgba(124,58,237,0.1); color: #7c3aed; border: 1px solid rgba(124,58,237,0.2); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block;">${h}</span>
+                `).join('');
+
+                container.innerHTML = `
+                    <div style="background: #fff; width: 793px; min-height: 1122px; padding: 40px; box-sizing: border-box; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333;">
+                        <div style="text-align: center; margin-bottom: 30px;">
+                            <h1 style="color: #2c3e50; margin: 0 0 10px 0; font-size: 28px; font-weight: bold; text-transform: uppercase;">${cvData.nome || ''}</h1>
+                            <div style="color: #555; font-size: 14px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
+                                ${infoStr}
+                            </div>
+                            ${discHtml}
+                        </div>
+
+                        ${cvData.resumo ? `
+                            <div style="margin-bottom: 25px;">
+                                <h2 style="font-size: 16px; color: #111; text-transform: uppercase; border-bottom: 2px solid #7c3aed; padding-bottom: 5px; margin-bottom: 12px;">Resumo Profissional</h2>
+                                <p style="font-size: 14px; color: #4b5563; line-height: 1.5; margin: 0; white-space: pre-wrap;">${cvData.resumo}</p>
+                            </div>
+                        ` : ''}
+
+                        ${exps.length > 0 ? `
+                            <div style="margin-bottom: 25px;">
+                                <h2 style="font-size: 16px; color: #111; text-transform: uppercase; border-bottom: 2px solid #7c3aed; padding-bottom: 5px; margin-bottom: 12px;">Experiência</h2>
+                                ${expHtml}
+                            </div>
+                        ` : ''}
+
+                        ${(emHtml || formHtml) ? `
+                            <div style="margin-bottom: 25px;">
+                                <h2 style="font-size: 16px; color: #111; text-transform: uppercase; border-bottom: 2px solid #7c3aed; padding-bottom: 5px; margin-bottom: 12px;">Formação Acadêmica</h2>
+                                ${emHtml}
+                                ${formHtml}
+                            </div>
+                        ` : ''}
+
+                        ${habHtml ? `
+                            <div>
+                                <h2 style="font-size: 16px; color: #111; text-transform: uppercase; border-bottom: 2px solid #7c3aed; padding-bottom: 5px; margin-bottom: 12px;">Habilidades</h2>
+                                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                    ${habHtml}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                
+                // Aguarda 50ms para garantir paint na DOM
+                await new Promise(r => setTimeout(r, 50)); 
+                
+                const canvas = await html2canvas(container.firstElementChild, { 
+                    scale: 1.5, 
+                    useCORS: true, 
+                    backgroundColor: '#ffffff'
+                });
+                
+                const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                const imgProps = doc.getImageProperties(imgData);
+                const pdfHeight = (imgProps.height * pageW) / imgProps.width;
+                
+                doc.addImage(imgData, 'JPEG', 0, 0, pageW, pdfHeight);
+            }
+
+            document.body.removeChild(container);
+
+            const timestamp = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+            doc.save(`curriculos_lote_${timestamp}.pdf`);
+        } catch (err) {
+            console.error('Erro ao gerar PDF em lote:', err);
+            alert('Erro ao gerar o PDF: ' + err.message);
+        } finally {
+            setGerandoPdf(false);
         }
     };
 
@@ -352,23 +574,26 @@ export default function EmpresaDashboard() {
     const atualizarFiltro = (field, value) => setFiltros(prev => ({ ...prev, [field]: value }));
     const atualizarCursoFiltro = (idx, value) => setFiltros(prev => { const c = [...prev.cursos]; c[idx] = value; return { ...prev, cursos: c }; });
 
-    // Sistema de Match e Filtros Diretos
+    // Sistema de Compatibilidade e Filtros Diretos
     const talentosComMatch = useMemo(() => {
         let maxPoints = 0;
 
         const cursosAtivos = filtros.cursos.filter(c => c.trim());
-        if (cursosAtivos.length > 0) maxPoints += cursosAtivos.length; // 1 pt por curso
+        if (cursosAtivos.length > 0) maxPoints += cursosAtivos.length;
         if (filtros.cidade.trim()) maxPoints += 1;
         if (filtros.habilidade.trim()) maxPoints += 1;
-        if (filtros.nivelFormacao !== 'Qualquer') maxPoints += 1;
-        if (filtros.statusCurriculo !== 'todos') maxPoints += 1;
+        if (filtros.ensinoMedio) maxPoints += 1;
+        if (filtros.ensinoSuperior) maxPoints += 1;
+        if (filtros.cursoSuperior.trim()) maxPoints += 1;
+        if (filtros.perfilDisc) maxPoints += 1;
 
         const processados = talentos.map(t => {
             const completo = isCurriculoCompleto(t);
             
-            // Filtro restritivo de status de currículo
+            // Filtro restritivo de status de currículo e gênero
             if (filtros.statusCurriculo === 'completo' && !completo) return null;
             if (filtros.statusCurriculo === 'incompleto' && completo) return null;
+            if (filtros.genero && t.genero !== filtros.genero) return null;
 
             // Se tiver filtro de NOME ou IDADE, consideramos filtros restritivos (eliminatórios)
             const nome = filtros.nome.trim().toLowerCase();
@@ -377,6 +602,12 @@ export default function EmpresaDashboard() {
             const idade = calcIdade(t.data_nascimento);
             if (filtros.idadeMin && (idade === null || idade < Number(filtros.idadeMin))) return null;
             if (filtros.idadeMax && (idade === null || idade > Number(filtros.idadeMax))) return null;
+
+            // Filtro DISC: eliminatório quando selecionado
+            if (filtros.perfilDisc) {
+                const dominante = getDiscDominante(t.perfil_disc);
+                if (dominante !== filtros.perfilDisc) return null;
+            }
 
             let pontos = 0;
 
@@ -400,32 +631,38 @@ export default function EmpresaDashboard() {
                 if (hasHabilidade) pontos += 1;
             }
 
-            if (filtros.nivelFormacao !== 'Qualquer') {
-                const fms = t.formacoes || [];
+            // Ensino Médio (por pontos, baseado no status)
+            if (filtros.ensinoMedio) {
                 const em = t.ensino_medio || {};
-                let formacaoOk = false;
-                if (filtros.nivelFormacao === 'Superior Cursando' && fms.some(f => f.status === 'cursando')) formacaoOk = true;
-                if (filtros.nivelFormacao === 'Superior Completo' && fms.some(f => f.status === 'completo')) formacaoOk = true;
-                if (filtros.nivelFormacao === 'Ensino Médio' && em.status === 'completo') formacaoOk = true;
-                if (formacaoOk) pontos += 1;
+                if (em.status === filtros.ensinoMedio) pontos += 1;
+            }
+
+            // Ensino Superior (por pontos)
+            if (filtros.ensinoSuperior) {
+                const fms = t.formacoes || [];
+                const temSuperior = fms.some(f => f.status === filtros.ensinoSuperior);
+                if (temSuperior) pontos += 1;
+            }
+
+            // Curso superior específico (texto livre, por pontos)
+            if (filtros.cursoSuperior.trim()) {
+                const fms = t.formacoes || [];
+                const cs = filtros.cursoSuperior.toLowerCase();
+                const temCurso = fms.some(f => f.curso?.toLowerCase().includes(cs));
+                if (temCurso) pontos += 1;
             }
 
             // Bônus por indicações (Upgrade de Perfil) - OCULTO PARA DEPLOY
-            // const referralBonus = Math.min((t.referralCount || 0) * 5, 20); // Máximo 20% de bônus
+            // const referralBonus = Math.min((t.referralCount || 0) * 5, 20);
             const referralBonus = 0;
-            
-            // A lógica de prioridade: Se há pontos distribuídos, calculamos o %, senão é 100% de match (nenhum critério ativo).
-            let matchScore = 0;
-            if (maxPoints > 0) {
-                matchScore = Math.round((pontos / maxPoints) * 100) + referralBonus;
-            } else {
-                matchScore = 100 + referralBonus; 
-            }
+            let matchScore = maxPoints > 0
+                ? Math.round((pontos / maxPoints) * 100) + referralBonus
+                : 100 + referralBonus;
 
             return { ...t, matchScore, completo, referralCount: t.referralCount || 0 };
-        }).filter(t => t !== null); // Remove apenas os que falharam nos filtros estritos (nome, idade)
+        }).filter(t => t !== null);
 
-        // Ordena do maior match para o menor
+        // Ordena da maior compatibilidade para a menor
         return processados.sort((a, b) => b.matchScore - a.matchScore);
     }, [talentos, filtros]);
 
@@ -524,6 +761,7 @@ export default function EmpresaDashboard() {
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
                                             <div>
                                                 <p style={{ fontWeight: 'bold', marginBottom: '4px' }}>{cv?.nome || 'Sem currículo'}</p>
+                                                {cv?.genero && <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>👤 Gênero: {cv.genero}</p>}
                                                 {cv?.bairro && <p style={{ color: 'var(--neon-blue)', fontSize: '0.8rem', marginBottom: '4px' }}>📍 {cv.bairro}{cv.cidade ? ` - ${cv.cidade}` : ''}</p>}
                                                 {cv?.email && <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>✉ {cv.email}</p>}
                                                 {cv?.telefone && <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>📱 {cv.telefone}</p>}
@@ -553,8 +791,8 @@ export default function EmpresaDashboard() {
                 </div>
             )}
 
-            <Navbar icon={<Building size={24} />} title={empresa.razao_social} subtitle="[PJ]">
-                <button onClick={handleLogout} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}><LogOut size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> SAIR</button>
+            <Navbar icon={<Compass size={24} />} title="NORTE EMPREGOS" subtitle={`EMPRESA | ${empresa.razao_social}`}>
+                <button onClick={handleLogout} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}><LogOut size={16} /> SAIR</button>
             </Navbar>
 
             <div className="container" style={{ marginTop: '2rem' }}>
@@ -683,7 +921,7 @@ export default function EmpresaDashboard() {
                         {/* Painel de filtros */}
                         {showFiltros && (
                             <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                                <h4 style={{ color: 'var(--neon-purple)', marginBottom: '1.5rem' }}>🎯 Perfil de Match Desejado</h4>
+                                <h4 style={{ color: 'var(--neon-purple)', marginBottom: '1.5rem' }}>🎯 Perfil de Compatibilidade Desejado</h4>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                                     <div className="input-group" style={{ marginBottom: 0 }}>
                                         <label>Nome do candidato</label>
@@ -701,9 +939,30 @@ export default function EmpresaDashboard() {
                                         </div>
                                     </div>
                                     <div className="input-group" style={{ marginBottom: 0 }}>
-                                        <label>Nível de Formação</label>
-                                        <select className="neon-input" value={filtros.nivelFormacao} onChange={e => atualizarFiltro('nivelFormacao', e.target.value)}>
-                                            {NIVEL_FORM.map(n => <option key={n}>{n}</option>)}
+                                        <label>Ensino Médio</label>
+                                        <select className="neon-input" value={filtros.ensinoMedio} onChange={e => atualizarFiltro('ensinoMedio', e.target.value)}>
+                                            <option value="">Qualquer status</option>
+                                            <option value="completo">Completo</option>
+                                            <option value="cursando">Cursando</option>
+                                            <option value="incompleto">Incompleto</option>
+                                        </select>
+                                    </div>
+                                    <div className="input-group" style={{ marginBottom: 0 }}>
+                                        <label>Ensino Superior</label>
+                                        <select className="neon-input" value={filtros.ensinoSuperior} onChange={e => atualizarFiltro('ensinoSuperior', e.target.value)}>
+                                            <option value="">Qualquer status</option>
+                                            <option value="completo">Completo</option>
+                                            <option value="cursando">Cursando</option>
+                                        </select>
+                                    </div>
+                                    <div className="input-group" style={{ marginBottom: 0 }}>
+                                        <label>Curso Superior (nome)</label>
+                                        <input className="neon-input" placeholder="Ex: Administração" value={filtros.cursoSuperior} onChange={e => atualizarFiltro('cursoSuperior', e.target.value)} />
+                                    </div>
+                                    <div className="input-group" style={{ marginBottom: 0 }}>
+                                        <label>Perfil Comportamental (DISC)</label>
+                                        <select className="neon-input" value={filtros.perfilDisc} onChange={e => atualizarFiltro('perfilDisc', e.target.value)}>
+                                            {DISC_PERFIS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                                         </select>
                                     </div>
                                     <div className="input-group" style={{ marginBottom: 0 }}>
@@ -722,6 +981,15 @@ export default function EmpresaDashboard() {
                                             <option value="incompleto">Apenas Incompletos</option>
                                         </select>
                                     </div>
+                                    <div className="input-group" style={{ marginBottom: 0 }}>
+                                        <label>Gênero</label>
+                                        <select className="neon-input" value={filtros.genero} onChange={e => atualizarFiltro('genero', e.target.value)}>
+                                            <option value="">Qualquer</option>
+                                            <option value="Masculino">Masculino</option>
+                                            <option value="Feminino">Feminino</option>
+                                            <option value="Prefiro não dizer">Outros / Não informado</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 {/* Até 3 cursos profissionalizantes */}
@@ -737,10 +1005,29 @@ export default function EmpresaDashboard() {
                                     </div>
                                 </div>
 
-                                <button onClick={() => setFiltros({ nome: '', idadeMin: '', idadeMax: '', cursos: ['', '', ''], nivelFormacao: 'Qualquer', cidade: '', habilidade: '', statusCurriculo: 'todos' })}
+                                <button onClick={() => setFiltros({ nome: '', idadeMin: '', idadeMax: '', cursos: ['', '', ''], ensinoMedio: '', ensinoSuperior: '', cursoSuperior: '', perfilDisc: '', cidade: '', habilidade: '', statusCurriculo: 'todos', genero: '' })}
                                     className="neon-button secondary" style={{ margin: '1rem 0 0 0', padding: '6px 16px', width: 'auto', fontSize: '0.8rem' }}>
                                     Limpar Filtros
                                 </button>
+                            </div>
+                        )}
+
+                        {/* Barra de download em lote */}
+                        {selecionados.size > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.4)', borderRadius: '10px', padding: '0.75rem 1.25rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                                <span style={{ color: 'var(--neon-purple)', fontWeight: 700, fontSize: '0.9rem' }}>
+                                    ✅ {selecionados.size} candidato{selecionados.size !== 1 ? 's' : ''} selecionado{selecionados.size !== 1 ? 's' : ''}
+                                </span>
+                                <button
+                                    onClick={() => handleDownloadBatch(talentosComMatch.filter(t => selecionados.has(t.user_id)))}
+                                    disabled={gerandoPdf}
+                                    className="neon-button"
+                                    style={{ margin: 0, padding: '8px 16px', width: 'auto', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
+                                >
+                                    <Download size={16} />
+                                    {gerandoPdf ? 'GERANDO PDF...' : `BAIXAR ${selecionados.size} CURRÍCULO${selecionados.size !== 1 ? 'S' : ''}`}
+                                </button>
+                                <button onClick={() => setSelecionados(new Set())} className="neon-button secondary" style={{ margin: 0, padding: '8px 12px', width: 'auto', fontSize: '0.8rem' }}>Limpar Seleção</button>
                             </div>
                         )}
 
@@ -750,6 +1037,13 @@ export default function EmpresaDashboard() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
                                     <tr>
+                                        <th style={{ padding: '1rem', width: '40px' }}>
+                                            <input type="checkbox" 
+                                                checked={talentosComMatch.length > 0 && selecionados.size === talentosComMatch.length}
+                                                onChange={() => toggleTodos(talentosComMatch)}
+                                                style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--neon-purple)' }}
+                                            />
+                                        </th>
                                         <th style={{ padding: '1rem' }}>Candidato</th>
                                         <th style={{ padding: '1rem' }}>Afinidade</th>
                                         <th style={{ padding: '1rem' }}>Idade</th>
@@ -760,10 +1054,18 @@ export default function EmpresaDashboard() {
                                 </thead>
                                 <tbody>
                                     {talentosComMatch.map(t => (
-                                        <tr key={t.user_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <tr key={t.user_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: selecionados.has(t.user_id) ? 'rgba(124,58,237,0.07)' : 'transparent', transition: 'background 0.2s' }}>
+                                            <td style={{ padding: '1rem', width: '40px' }}>
+                                                <input type="checkbox"
+                                                    checked={selecionados.has(t.user_id)}
+                                                    onChange={() => toggleSelecionado(t.user_id)}
+                                                    style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--neon-purple)' }}
+                                                />
+                                            </td>
                                             <td style={{ padding: '1rem' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     <p style={{ fontWeight: 'bold', margin: 0 }}>{t.nome}</p>
+                                                    {t.genero && <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({t.genero})</span>}
                                                     {t.completo ? (
                                                         <span title="Perfil Completo" style={{ color: '#22c55e', display: 'flex' }}><CheckCircle size={14} /></span>
                                                     ) : (
@@ -793,16 +1095,19 @@ export default function EmpresaDashboard() {
                                             <td style={{ padding: '1rem' }}>
                                                 {t.matchScore >= 100 ? (
                                                     <span style={{ 
-                                                        background: 'linear-gradient(90deg, rgba(34,197,94,0.15) 0%, rgba(124,58,237,0.15) 100%)', 
-                                                        color: '#fff', 
-                                                        padding: '4px 10px', 
-                                                        borderRadius: '12px', 
-                                                        fontSize: '0.8rem', 
-                                                        fontWeight: 'bold', 
-                                                        whiteSpace: 'nowrap',
-                                                        border: '1px solid rgba(124,58,237,0.3)'
+                                                        background: 'linear-gradient(90deg, #dcfce7, #f0f9ff)', 
+                                                        border: '1px solid #7c3aed66', 
+                                                        padding: '4px 12px', 
+                                                        borderRadius: '20px', 
+                                                        fontSize: '0.85rem', 
+                                                        fontWeight: 900, 
+                                                        color: 'var(--norte-dark-green)', 
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        gap: '8px', 
+                                                        boxShadow: '0 0 10px rgba(0, 91, 50, 0.2)' 
                                                     }}>
-                                                        🚀 Super Match {t.matchScore}%
+                                                        🚀 Super Compatibilidade {t.matchScore}%
                                                     </span>
                                                 ) : t.matchScore >= 50 ? (
                                                     <span style={{ background: 'rgba(255,193,7,0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🟡 {t.matchScore}% compatível</span>
@@ -839,7 +1144,7 @@ export default function EmpresaDashboard() {
                     <div className="glass-panel" style={{ maxWidth: '800px', margin: '0 auto', animation: 'fadeIn 0.5s ease-out' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '1.5rem' }}>
                             <div style={{ position: 'relative' }}>
-                                <div style={{ width: '100px', height: '100px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '2px dashed rgba(0,240,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                <div style={{ width: '100px', height: '100px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '2px dashed var(--norte-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                                     {perfilForm.logo_url ? (
                                         <img src={perfilForm.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                     ) : (
@@ -917,7 +1222,7 @@ export default function EmpresaDashboard() {
                     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
                 }}>
                     <div className="glass-panel" style={{ width: '90%', maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
-                        <h3 style={{ color: 'var(--neon-purple)', marginBottom: '1rem' }}>FECHAR ESTA VAGA?</h3>
+                        <h3 style={{ color: 'var(--norte-dark-green)', marginBottom: '1rem' }}>FECHAR ESTA VAGA?</h3>
                         <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
                             Ao fechar esta vaga, novos talentos não poderão mais se candidatar. Esta ação pode ser revertida editando a vaga futuramente.
                         </p>

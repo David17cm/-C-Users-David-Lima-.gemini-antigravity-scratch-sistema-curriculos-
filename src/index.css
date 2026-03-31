@@ -1,18 +1,21 @@
 :root {
   --bg-color: #ffffff;
-  /* Fundo Branco */
-  --circuit-color: #f3f4f6;
-  /* Cinza muito claro para detalhes sutis */
-  --neon-purple: #7c3aed;
-  /* Roxo elegante (Violet 600) */
-  --neon-blue: #2563eb;
-  /* Azul Royal para acentos secundários */
-  --text-main: #111827;
-  /* Cinza quase preto para o texto principal */
-  --text-muted: #4b5563;
-  /* Cinza médio para textos secundários */
+  --circuit-color: #f0fdf4; /* Verde muito claro para fundo */
+  
+  /* Norte Empregos - Amazonian Palette */
+  --norte-green: #008D4C;      /* Amazônia */
+  --norte-dark-green: #005B32; /* Floresta Amazônica */
+  --norte-yellow: #EBBF21;     /* Amarelo Tropical */
+  --norte-teal: #438D79;       /* Vitória Régia */
+
+  /* Mapeamento para manter compatibilidade com componentes existentes */
+  --neon-purple: var(--norte-dark-green);
+  --neon-blue: var(--norte-green);
+  
+  --text-main: #064e3b;  /* Verde bem escuro para texto */
+  --text-muted: #374151;
   --surface: #ffffff;
-  --border-radius: 8px;
+  --border-radius: 12px;
 }
 
 body {
@@ -106,8 +109,8 @@ label {
 }
 
 .neon-input:focus {
-  border-color: var(--neon-purple);
-  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
+  border-color: var(--norte-green);
+  box-shadow: 0 0 0 4px rgba(0, 141, 76, 0.1);
 }
 
 .neon-input::placeholder {
@@ -136,9 +139,9 @@ label {
 }
 
 .neon-button:hover {
-  background: #6d28d9;
+  background: var(--norte-green);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 141, 76, 0.3);
 }
 
 .neon-button:active {

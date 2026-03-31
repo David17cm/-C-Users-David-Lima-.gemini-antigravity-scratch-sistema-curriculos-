@@ -155,13 +155,13 @@ export default function DiscQuizModal({ isOpen, onClose, onFinish }) {
 
         {!isFinished ? (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem', color: 'var(--neon-purple)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem', color: 'var(--norte-green)' }}>
               <Brain size={28} />
               <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900 }}>TESTE COMPORTAMENTAL</h2>
             </div>
 
             <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', marginBottom: '2rem', overflow: 'hidden' }}>
-              <div style={{ width: `${progress}%`, height: '100%', background: 'var(--neon-purple)', transition: 'width 0.3s ease' }} />
+              <div style={{ width: `${progress}%`, height: '100%', background: 'var(--norte-green)', transition: 'width 0.3s ease' }} />
             </div>
 
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Questão {currentStep + 1} de {QUESTIONS.length}</p>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, Briefcase, List, LogOut, ChevronDown, FileText, Scale, Shield, Trash2, Brain } from 'lucide-react';
+import { User, Briefcase, List, LogOut, ChevronDown, FileText, Scale, Shield, Trash2, Brain, Compass } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import Navbar from './Navbar';
 
@@ -34,8 +34,8 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
         gap: '12px',
         padding: '12px 16px',
         width: '100%',
-        background: isActive(path) ? 'rgba(124, 58, 237, 0.1)' : 'transparent',
-        color: isActive(path) ? 'var(--neon-purple)' : 'var(--text-main)',
+        background: isActive(path) ? 'rgba(0, 91, 50, 0.1)' : 'transparent',
+        color: isActive(path) ? 'var(--norte-dark-green)' : 'var(--text-main)',
         border: 'none',
         borderRadius: '8px',
         fontSize: '0.9rem',
@@ -46,7 +46,7 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
     });
 
     return (
-        <Navbar icon={<User size={24} />} title="PORTAL DO CANDIDATO" subtitle={subtitle}>
+        <Navbar icon={<Compass size={24} />} title="NORTE EMPREGOS" subtitle={subtitle}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', position: 'relative' }} ref={menuRef}>
                 <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -58,8 +58,8 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
                         display: 'flex', 
                         alignItems: 'center', 
                         gap: '10px',
-                        border: isMenuOpen ? '1px solid var(--neon-purple)' : '1px solid rgba(255,255,255,0.1)',
-                        background: isMenuOpen ? 'rgba(124, 58, 237, 0.05)' : 'transparent'
+                        border: isMenuOpen ? '1px solid var(--norte-green)' : '1px solid rgba(0,91,50,0.1)',
+                        background: isMenuOpen ? 'rgba(0, 91, 50, 0.05)' : 'transparent'
                     }}
                 >
                     <div style={{ 
@@ -67,7 +67,7 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
                         height: '28px', 
                         borderRadius: '50%', 
                         overflow: 'hidden', 
-                        background: 'var(--neon-purple)',
+                        background: 'var(--norte-green)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -88,11 +88,11 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
                     <button 
                         onClick={() => navigate('/dashboard', { state: { openDisc: true } })}
                         style={{
-                            background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(56,189,248,0.2))',
-                            border: '1px solid rgba(124,58,237,0.3)',
+                            background: 'linear-gradient(135deg, rgba(235,191,33,0.2), rgba(0,141,76,0.2))',
+                            border: '1px solid var(--norte-yellow)',
                             borderRadius: '20px',
                             padding: '4px 12px',
-                            color: 'var(--neon-purple)',
+                            color: 'var(--norte-dark-green)',
                             fontSize: '0.65rem',
                             fontWeight: 800,
                             cursor: 'pointer',
@@ -117,8 +117,8 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
                         maxWidth: 'calc(100vw - 2rem)',
                         padding: '8px',
                         zIndex: 1000,
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4)',
-                        border: '1px solid rgba(124, 58, 237, 0.2)',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                        border: '1px solid var(--norte-green)',
                         animation: 'fadeIn 0.2s ease-out'
                     }}>
                         <button style={dropdownItemStyle('/dashboard')} onClick={() => { navigate('/dashboard'); setIsMenuOpen(false); }}>

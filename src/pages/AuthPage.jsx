@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CircuitBoard, User, Lock, Mail, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Compass, User, Lock, Mail, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 // Constantes de redirecionamento
@@ -68,10 +68,9 @@ export default function AuthPage() {
     useEffect(() => {
         // Se temos um usuário e a carga do AuthContext finalizou
         if (user && !authLoading) {
-            // Conta sem role configurada (Pode ocorrer se RLS falhar ou conta órfã)
+            // Se temos um usuário logado mas sem perfil ainda, simplesmente aguardamos
+            // o AuthContext terminar o fetch e mudar o estado de loading.
             if (role === null && isLogin) {
-                setError('Perfil de acesso não encontrado. Verifique se sua conta foi aprovada ou configurada corretamente.');
-                setLoading(false);
                 return;
             }
 
@@ -129,8 +128,11 @@ export default function AuthPage() {
                         password: loginPassword,
                     });
 
-                    // Erro de credenciais (400) — não tentar novamente
-                    if (signInError && signInError.status === 400) throw signInError;
+                    // Erro de credenciais (400) ou formato ruim — apenas propaga o erro
+                    if (signInError && signInError.status === 400) {
+                        throw signInError;
+                    }
+                    
                     // Erro de rede/servidor — propagar para o retry
                     if (signInError) throw signInError;
 
@@ -138,7 +140,11 @@ export default function AuthPage() {
                 });
                 signInData = result;
             } catch (authErr) {
-                console.error('Erro detalhado de Login:', authErr);
+                // Se o erro NÃO for de credenciais (400), logamos para fins de debug
+                if (authErr && authErr.status !== 400) {
+                    console.error('Erro detalhado de Login:', authErr);
+                }
+                
                 // Se o erro NÃO for de credenciais (ex: rede), repassar para o catch externo
                 if (authErr.status !== 400) throw authErr;
 
@@ -178,7 +184,7 @@ export default function AuthPage() {
                 throw authErr;
             }
 
-            // Registro de Log de Acesso (fire-and-forget)
+            // Registro de Log de Acesso (fire-and-forget de forma segura)
             if (signInData?.user) {
                 supabase.from('access_logs').insert([{
                     user_id: signInData.user.id,
@@ -186,7 +192,13 @@ export default function AuthPage() {
                     action: 'login',
                     user_agent: navigator.userAgent,
                     accessed_at: new Date().toISOString()
-                }]).catch(() => { });
+                }]).then(() => {}).catch(() => {});
+
+                // DÁ UM TEMPO PARA O CONTEXTO ATUALIZAR E REDIRECIONAR O COMPONENTE.
+                // SE ALGO DER ERRADO (ex: router), DESTRAVA O BOTÃO APÓS 3 SEG!
+                setTimeout(() => {
+                    setLoading(false);
+                }, 3000);
             }
 
         } catch (err) {
@@ -196,9 +208,11 @@ export default function AuthPage() {
                 setLockedUntil(Date.now() + LOCKOUT_DURATION_MS);
                 setError(`Conta bloqueada por ${LOCKOUT_DURATION_MS / 1000}s.`);
             } else {
-                setError(`Credenciais inválidas. ${MAX_LOGIN_ATTEMPTS - newAttempts} tentativa(s) restante(s).`);
+                const msg = err.message === 'Invalid login credentials' 
+                    ? 'E-mail ou senha incorretos.' 
+                    : (err.message || 'Credenciais inválidas.');
+                setError(`${msg} ${MAX_LOGIN_ATTEMPTS - newAttempts} tentativa(s) restante(s).`);
             }
-        } finally {
             setLoading(false);
         }
     };
@@ -309,12 +323,16 @@ export default function AuthPage() {
 
     return (
         <div className="flex-center">
-            <div className="glass-panel" style={{ width: '100%', maxWidth: '420px' }}>
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                    <CircuitBoard size={48} color="var(--neon-blue)" style={{ margin: '0 auto 1rem' }} />
-                    <h2>{isLogin ? 'ACESSO AO SISTEMA' : 'NOVO REGISTRO'}</h2>
-                    <p style={{ color: 'var(--text-muted)' }}>
-                        {isLogin ? 'Conecte-se para gerenciar seus dados.' : 'Inicialize seu perfil profissional.'}
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', border: '1px solid var(--norte-green)' }}>
+                <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+                    <div style={{ background: 'var(--norte-green)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', transform: 'rotate(5deg)', boxShadow: '0 10px 20px rgba(0, 141, 76, 0.2)' }}>
+                        <Compass size={32} color="#fff" />
+                    </div>
+                    <h2 style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.03em', color: 'var(--norte-dark-green)', margin: 0 }}>
+                        {isLogin ? 'BEM-VINDO' : 'NOVO CADASTRO'}
+                    </h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.5rem' }}>
+                        Acompanhe suas vagas na <span style={{ color: 'var(--norte-green)', fontWeight: 700 }}>Norte Empregos</span>
                     </p>
                 </div>
 
@@ -336,24 +354,6 @@ export default function AuthPage() {
                         <AlertTriangle size={16} />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <span>{error}</span>
-                            <button 
-                                onClick={() => {
-                                    localStorage.clear();
-                                    sessionStorage.clear();
-                                    window.location.reload();
-                                }}
-                                style={{ 
-                                    fontSize: '0.75rem', 
-                                    textDecoration: 'underline', 
-                                    background: 'none', 
-                                    border: 'none', 
-                                    color: 'inherit', 
-                                    cursor: 'pointer',
-                                    padding: 0
-                                }}
-                            >
-                                Limpar cache e tentar novamente
-                            </button>
                         </div>
                     </div>
                 ) : successMessage ? (
@@ -481,11 +481,11 @@ export default function AuthPage() {
                         <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                             <label htmlFor="aceitouTermos" style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
                                 <input type="checkbox" id="aceitouTermos" name="aceitouTermos" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ marginTop: '3px' }} />
-                                <span>Li e concordo com os <a href="/legal?doc=termos" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Termos de Uso</a> do sistema.</span>
+                                <span>Li e concordo com os <a href="/legal?doc=termos" target="_blank" style={{ color: 'var(--norte-green)', textDecoration: 'underline' }}>Termos de Uso</a> do sistema.</span>
                             </label>
                             <label htmlFor="aceitouPrivacidade" style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'none', alignItems: 'flex-start' }}>
                                 <input type="checkbox" id="aceitouPrivacidade" name="aceitouPrivacidade" checked={aceitouPrivacidade} onChange={e => setAceitouPrivacidade(e.target.checked)} style={{ marginTop: '3px' }} />
-                                <span>Autorizo o processamento dos meus dados conforme a <a href="/legal?doc=privacidade" target="_blank" style={{ color: 'var(--neon-blue)', textDecoration: 'underline' }}>Política de Privacidade</a>.</span>
+                                <span>Autorizo o processamento dos meus dados conforme a <a href="/legal?doc=privacidade" target="_blank" style={{ color: 'var(--norte-green)', textDecoration: 'underline' }}>Política de Privacidade</a>.</span>
                             </label>
                         </div>
                     )}

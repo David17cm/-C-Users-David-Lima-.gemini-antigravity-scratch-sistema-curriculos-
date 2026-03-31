@@ -25,7 +25,7 @@ export default function TermsPage() {
 
                     <section style={{ marginBottom: '1.5rem' }}>
                         <h3 style={{ color: 'var(--neon-blue)', marginBottom: '0.5rem' }}>1. Aceitação dos Termos</h3>
-                        <p>Ao acessar e utilizar a plataforma Talentos Futuro do Trabalho, você declara ter lido, compreendido e concordado integralmente com estes Termos de Uso. Se não concordar com qualquer cláusula, não utilize os serviços.</p>
+                        <p>Ao acessar e utilizar a plataforma Norte Empregos, você declara ter lido, compreendido e concordado integralmente com estes Termos de Uso. Se não concordar com qualquer cláusula, não utilize os serviços.</p>
                     </section>
 
                     <section style={{ marginBottom: '1.5rem' }}>
@@ -59,7 +59,7 @@ export default function TermsPage() {
                             <li>Aplicar golpes de qualquer natureza contra outros usuários da plataforma.</li>
                             <li>Usar scripts automáticos, bots ou qualquer meio não humano para abusar dos serviços.</li>
                         </ul>
-                        <p style={{ marginTop: '0.75rem' }}>Violações a esta política resultarão em remoção imediata da conta e poderão ser reportadas às autoridades competentes. Para denunciar comportamento suspeito, entre em contato pelo e-mail: <b>suporte@talentosfuturo.com.br</b>.</p>
+                        <p style={{ marginTop: '0.75rem' }}>Violações a esta política resultarão em remoção imediata da conta e poderão ser reportadas às autoridades competentes. Para denunciar comportamento suspeito, entre em contato pelo e-mail: <b>suporte@norteempregos.com.br</b>.</p>
                     </section>
 
                     <section style={{ marginBottom: '1.5rem' }}>
