@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Compass, User, Lock, Mail, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Compass, User, Lock, Mail, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import BrandLogo from '../components/layout/BrandLogo';
 
 // Constantes de redirecionamento
 const ROLE_REDIRECT = {
@@ -23,7 +24,9 @@ export default function AuthPage() {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -326,7 +329,7 @@ export default function AuthPage() {
             <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', border: '1px solid var(--norte-green)' }}>
                 <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
                     <div style={{ background: 'var(--norte-green)', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', transform: 'rotate(5deg)', boxShadow: '0 10px 20px rgba(0, 141, 76, 0.2)' }}>
-                        <Compass size={32} color="#fff" />
+                        <BrandLogo size={32} />
                     </div>
                     <h2 style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.03em', color: 'var(--norte-dark-green)', margin: 0 }}>
                         {isLogin ? 'BEM-VINDO' : 'NOVO CADASTRO'}
@@ -439,15 +442,31 @@ export default function AuthPage() {
                             <input
                                 id="password"
                                 name="password"
-                                type="password"
+                                type={showPassword ? 'text' : 'password'}
                                 className="neon-input"
-                                style={{ paddingLeft: '45px' }}
+                                style={{ paddingLeft: '45px', paddingRight: '45px' }}
                                 placeholder="••••••••"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
                                 minLength={isLogin ? 1 : 8}
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                style={{
+                                    position: 'absolute',
+                                    top: '12px',
+                                    right: '15px',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    padding: '4px'
+                                }}
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
                         </div>
                         {/* SEGURANÇA MED-03: Dica de requisitos de senha */}
                         {!isLogin && (
@@ -465,14 +484,30 @@ export default function AuthPage() {
                                 <input
                                     id="confirmPassword"
                                     name="confirmPassword"
-                                    type="password"
+                                    type={showConfirmPassword ? 'text' : 'password'}
                                     className="neon-input"
-                                    style={{ paddingLeft: '45px' }}
+                                    style={{ paddingLeft: '45px', paddingRight: '45px' }}
                                     placeholder="Repita a senha"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
                                     required={!isLogin}
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                    style={{
+                                        position: 'absolute',
+                                        top: '12px',
+                                        right: '15px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        padding: '4px'
+                                    }}
+                                >
+                                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
                             </div>
                         </div>
                     )}

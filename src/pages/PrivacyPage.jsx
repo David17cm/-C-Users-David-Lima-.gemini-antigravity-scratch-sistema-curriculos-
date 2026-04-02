@@ -38,7 +38,9 @@ export default function PrivacyPage() {
                             <li>Gerar e personalizar o arquivo do seu currículo.</li>
                             <li>Permitir que você acesse e edite suas informações futuramente.</li>
                             <li>Gerenciar o acesso ao sistema e suporte técnico.</li>
+                            <li>Divulgação de <b>Cases de Sucesso</b>: Em caso de contratação comprovada, seu nome e imagem podem ser utilizados em comunicações de marketing da plataforma, conforme detalhado nos Termos de Uso.</li>
                         </ul>
+
                     </section>
 
                     <section style={{ marginBottom: '1.5rem' }}>

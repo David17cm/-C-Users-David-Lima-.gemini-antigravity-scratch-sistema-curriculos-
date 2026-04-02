@@ -30,14 +30,13 @@ export const AuthProvider = ({ children }) => {
             if (event === 'SIGNED_OUT') {
                 setAuthState({ user: null, role: null, pago: false, loading: false });
                 lastFetchedUserId.current = null;
-            } else {
-                // INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED
+            } else if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') {
                 setAuthState(prev => ({
                     ...prev,
                     user: currentUser,
-                    // Se temos um NOVO usuário, mantemos loading=true até o fetch da role terminar.
-                    // Se não há usuário, liberamos o loading.
-                    loading: !!currentUser && (currentUser.id !== lastFetchedUserId.current)
+                    // Se o usuário mudou ou se carregamos o primeiro usuário no refresh, 
+                    // mantemos loading: true até o useEffect da role processar.
+                    loading: currentUser ? (currentUser.id !== lastFetchedUserId.current) : false
                 }));
             }
         });
@@ -67,7 +66,6 @@ export const AuthProvider = ({ children }) => {
                     .from('user_roles')
                     .select('role, pago')
                     .eq('user_id', user.id)
-                    .limit(1)
                     .maybeSingle();
 
                 if (!mounted) return;
@@ -80,11 +78,16 @@ export const AuthProvider = ({ children }) => {
                         loading: false
                     }));
                 } else {
-                    console.warn('AuthContext: Role não encontrada.', error?.message);
-                    setAuthState(prev => ({ ...prev, role: null, pago: false, loading: false }));
+                    // Se não encontrar a role, definimos como 'candidato' como fallback
+                    // MAS apenas removemos o loading para o site não travar.
+                    setAuthState(prev => ({ 
+                        ...prev, 
+                        role: 'candidato', 
+                        pago: false, 
+                        loading: false 
+                    }));
                 }
             } catch (err) {
-                console.error('AuthContext: Erro ao buscar role:', err.message);
                 if (mounted) {
                     setAuthState(prev => ({ ...prev, role: null, pago: false, loading: false }));
                 }

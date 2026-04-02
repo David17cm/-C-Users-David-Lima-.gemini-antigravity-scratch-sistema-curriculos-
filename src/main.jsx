@@ -13,6 +13,7 @@ import LandingPage from './pages/LandingPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
 import LegalPage from './pages/LegalPage';
+import CVWizardPage from './pages/CVWizardPage';
 import CookieBanner from './components/ui/CookieBanner';
 import TrackerWrapper from './components/layout/TrackerWrapper';
 import { AuthProvider } from './contexts/AuthContext';
@@ -52,6 +53,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/minhas-candidaturas" element={
           <ProtectedRoute allowedRoles={['candidato']}>
             <MinhasCandidaturasPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/cv-wizard" element={
+          <ProtectedRoute allowedRoles={['candidato']}>
+            <CVWizardPage />
           </ProtectedRoute>
         } />
 

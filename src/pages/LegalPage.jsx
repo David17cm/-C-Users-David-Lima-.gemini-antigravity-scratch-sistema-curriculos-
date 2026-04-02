@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Shield, FileText, Cookie, Building, Users, AlertTriangle, Lock, Clock, Megaphone, Download, Trash2, Scale } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { NorteConfirmModal } from '../components/ui/NorteConfirmModal';
 
 export default function LegalPage() {
     const navigate = useNavigate();
@@ -26,6 +27,9 @@ export default function LegalPage() {
                     <p>A plataforma é uma ferramenta de intermediação. Não garantimos e não somos responsáveis por: que o uso do currículo resultará em contratação; a veracidade das vagas publicadas pelas empresas; acordos ou contratos realizados diretamente entre empresa e candidato.</p>
                     <h3>4. Resolução de Disputas</h3>
                     <p>Eventuais conflitos decorrentes destes Termos serão resolvidos prioritariamente por acordo direto entre as partes. Na impossibilidade de acordo, fica eleito o foro da comarca competente da sede da plataforma.</p>
+                    <h3>5. Casos de Sucesso e Divulgação</h3>
+                    <p>Ao utilizar a plataforma e obter uma contratação, o usuário autoriza expressamente a Norte Empregos a utilizar seu nome e imagem para divulgação de "Cases de Sucesso" em nossas redes sociais e materiais de marketing.</p>
+
                 </>
             )
         },
@@ -39,7 +43,8 @@ export default function LegalPage() {
                     <p><strong>Candidatos:</strong> nome, e-mail, telefone, CPF, endereço, currículo, experiências, formação, foto e documentos.</p>
                     <p><strong>Empresas:</strong> razão social, CNPJ, dados do responsável, endereço, vagas publicadas e dados de pagamento.</p>
                     <h3>2. Como Usamos os Dados</h3>
-                    <p>Seus dados são utilizados exclusivamente para: conectar candidatos a empresas; melhorar a experiência da plataforma; cumprir obrigações legais. Não vendemos dados a terceiros.</p>
+                    <p>Seus dados são utilizados exclusivamente para: conectar candidatos a empresas; melhorar a experiência da plataforma; cumprir obrigações legais; <strong>divulgação de cases de sucesso (em caso de contratação)</strong>. Não vendemos dados a terceiros.</p>
+
                     <h3>3. Compartilhamento</h3>
                     <p>O currículo do candidato poderá ser compartilhado com empresas cadastradas na plataforma, conforme autorização expressa do candidato. As empresas são responsáveis pelo uso que fazem desses dados.</p>
                     <h3>4. Prazo de Armazenamento</h3>
@@ -111,6 +116,8 @@ export default function LegalPage() {
     ]);
 
     const [activeDoc, setActiveDoc] = useState(docParam || 'termos');
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Funções de Ação
     const handleExportData = async () => {
@@ -141,9 +148,13 @@ export default function LegalPage() {
         }
     };
 
-    const handleDeleteAccount = async () => {
-        const confirmado = window.confirm('⚠️ ATENÇÃO: Todos os seus dados serão apagados permanentemente.\n\nEsta ação NÃO pode ser desfeita.\n\nDeseja continuar?');
-        if (!confirmado) return;
+    const handleDeleteAccount = () => {
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDelete = async () => {
+        setShowDeleteConfirm(false);
+        setIsDeleting(true);
         try {
             await supabase.from('access_logs').insert([{
                 user_id: user.id,
@@ -157,6 +168,8 @@ export default function LegalPage() {
             navigate('/');
         } catch (err) {
             alert('Erro ao excluir conta: ' + err.message);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -291,6 +304,17 @@ export default function LegalPage() {
                     </div>
                 </div>
             </div>
+
+            <NorteConfirmModal 
+                isOpen={showDeleteConfirm}
+                type="error"
+                title="Excluir Conta Permanentemente?"
+                message="Esta ação apagará todos os seus currículos, fotos e histórico de candidaturas. Não há como desfazer isso depois."
+                confirmText={isDeleting ? "Excluindo..." : "SIM, EXCLUIR TUDO"}
+                cancelText="NÃO, VOLTAR"
+                onConfirm={confirmDelete}
+                onCancel={() => setShowDeleteConfirm(false)}
+            />
         </div>
     );
 }

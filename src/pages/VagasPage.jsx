@@ -5,6 +5,7 @@ import { Briefcase, Building, ArrowLeft, Search, X, CheckCircle } from 'lucide-r
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import CandidateNavbar from '../components/layout/CandidateNavbar';
+import { NorteToast } from '../components/ui/NorteToast';
 
 const isVagaExpirada = (data_limite) => {
     if (!data_limite) return false;
@@ -25,8 +26,9 @@ export default function VagasPage() {
     const [reportingVaga, setReportingVaga] = useState(false);
     const [reportMotive, setReportMotive] = useState('');
     const [submittingReport, setSubmittingReport] = useState(false);
-    const [toast, setToast] = useState(null);
+    const [toast, setToast] = useState({ message: '', type: 'info' });
     const [profilePhoto, setProfilePhoto] = useState(null);
+    const [showMotivModal, setShowMotivModal] = useState(false);
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
@@ -75,7 +77,7 @@ export default function VagasPage() {
 
     const handleCandidatar = async (vagaId) => {
         if (!hasCV) {
-            navigate('/dashboard', { state: { alertCV: true } });
+            setShowMotivModal(true);
             return;
         }
         setCandidatando(true);
@@ -85,7 +87,7 @@ export default function VagasPage() {
             showToast('Candidatura enviada com sucesso! 🚀');
             fetchCandidaturas();
         } catch (err) {
-            alert('Erro ao se candidatar: ' + err.message);
+            setToast({ message: 'Erro ao se candidatar: ' + err.message, type: 'error' });
         } finally {
             setCandidatando(false);
         }
@@ -101,8 +103,8 @@ export default function VagasPage() {
     }, [vagas, searchQuery]);
 
     const handleDenunciarInterno = async () => {
-        if (!user) { alert('Faça login para denunciar.'); return; }
-        if (!reportMotive.trim()) { alert('Por favor, descreva o motivo da denúncia.'); return; }
+        if (!user) { setToast({ message: 'Faça login para denunciar.', type: 'info' }); return; }
+        if (!reportMotive.trim()) { setToast({ message: 'Por favor, descreva o motivo da denúncia.', type: 'info' }); return; }
 
         setSubmittingReport(true);
         try {
@@ -119,7 +121,7 @@ export default function VagasPage() {
             setReportingVaga(false);
             setReportMotive('');
         } catch (err) {
-            alert('Erro ao enviar denúncia: ' + err.message);
+            setToast({ message: 'Erro ao enviar denúncia: ' + err.message, type: 'error' });
         } finally {
             setSubmittingReport(false);
         }
@@ -154,6 +156,68 @@ export default function VagasPage() {
                     display: 'flex', alignItems: 'center', gap: '0.5rem'
                 }}>
                     <CheckCircle size={18} /> {toast.msg}
+                </div>
+            )}
+
+            {/* Modal Motivador */}
+            {showMotivModal && (
+                <div style={{ position:'fixed', inset:0, background:'rgba(15, 26, 15, 0.4)', backdropFilter:'blur(8px)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}
+                    onClick={e => e.target===e.currentTarget && setShowMotivModal(false)}>
+                    <div style={{ 
+                        background:'#ffffff', 
+                        border:'1px solid #e2e8f0', 
+                        borderRadius:'28px', 
+                        width:'100%', 
+                        maxWidth:'500px', 
+                        padding:'3rem 2rem', 
+                        position:'relative', 
+                        textAlign:'center', 
+                        boxShadow:'0 30px 60px -12px rgba(0,0,0,0.15)' 
+                    }}>
+                        <button onClick={() => setShowMotivModal(false)} style={{ position:'absolute', top:'20px', right:'20px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'#64748b', fontSize:'0.9rem', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.2s' }}>✕</button>
+
+                        {/* Ícone decorativo */}
+                        <div style={{ display:'inline-flex', padding:'24px', background:'rgba(0,141,76,0.06)', borderRadius:'50%', marginBottom:'2rem', border:'2px solid rgba(0,141,76,0.12)' }}>
+                            <span style={{ fontSize:'2.8rem' }}>📋</span>
+                        </div>
+
+                        <h2 style={{ fontSize:'1.85rem', fontWeight:900, marginBottom:'1rem', color:'var(--norte-dark-green)', lineHeight:1.2, letterSpacing:'-0.02em' }}>
+                            Um passo antes de se candidatar!
+                        </h2>
+                        <p style={{ color:'var(--text-muted)', lineHeight:1.6, marginBottom:'2rem', fontSize:'1.05rem', fontWeight:500 }}>
+                            Para se candidatar, você precisa ter um <strong style={{ color:'var(--norte-green)', fontWeight:800 }}>currículo completo</strong>. Criamos um processo rápido e guiado para você!
+                        </p>
+
+                        {/* Grade de Passos */}
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'10px', marginBottom:'2.5rem' }}>
+                            {[
+                                { emoji:'👤', text:'Dados', time:'3 min' },
+                                { emoji:'💼', text:'Exp.', time:'2 min' },
+                                { emoji:'🎓', text:'Ensino', time:'1 min' },
+                                { emoji:'⭐', text:'Skills', time:'1 min' },
+                                { emoji:'🧠', text:'DISC', time:'4 min' },
+                            ].map((item, i) => (
+                                <div key={i} style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'16px', padding:'12px 8px', textAlign:'center' }}>
+                                    <div style={{ fontSize:'1.2rem', marginBottom:'4px' }}>{item.emoji}</div>
+                                    <div style={{ color:'var(--norte-dark-green)', fontSize:'0.75rem', fontWeight:800 }}>{item.text}</div>
+                                    <div style={{ color:'var(--norte-green)', fontSize:'0.65rem', fontWeight:700, marginTop:'2px' }}>{item.time}</div>
+                                </div>
+                            ))}
+                            <div style={{ background:'rgba(235,191,33,0.08)', border:'1px solid rgba(235,191,33,0.2)', borderRadius:'16px', padding:'12px 8px', textAlign:'center', display:'flex', flexDirection:'column', justifyContent:'center' }}>
+                                <div style={{ color:'var(--norte-dark-green)', fontSize:'0.7rem', fontWeight:800, lineHeight:1.1 }}>Tempo Estimado</div>
+                                <div style={{ color:'#856404', fontSize:'0.85rem', fontWeight:900, marginTop:'4px' }}>~11 min</div>
+                            </div>
+                        </div>
+
+                        <div style={{ display:'flex', gap:'12px', flexDirection:'column' }}>
+                            <button onClick={() => navigate('/cv-wizard')} style={{ background:'var(--norte-green)', color:'#fff', border:'none', borderRadius:'16px', padding:'18px', fontSize:'1.1rem', fontWeight:800, cursor:'pointer', boxShadow:'0 10px 20px rgba(0,141,76,0.25)', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', transition:'transform 0.2s' }}>
+                                🚀 Fazer meu currículo agora
+                            </button>
+                            <button onClick={() => setShowMotivModal(false)} style={{ background:'transparent', border:'none', color:'var(--text-muted)', borderRadius:'16px', padding:'10px', fontSize:'0.95rem', cursor:'pointer', fontWeight:600, textDecoration:'underline' }}>
+                                Voltar para as vagas
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -232,6 +296,9 @@ export default function VagasPage() {
                                         ⏳ {isVagaExpirada(selectedVaga.data_limite) ? 'Prazo Encerrado:' : 'Inscrições até:'} {new Date(selectedVaga.data_limite + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                                     </span>
                                 )}
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, background: 'rgba(34,197,94,0.08)', color: '#16a34a', padding: '4px 12px', borderRadius: '20px', border: '1px solid rgba(34,197,94,0.2)' }}>
+                                    📦 {selectedVaga.quantidade || 1} {(selectedVaga.quantidade > 1) ? 'Vagas Disponíveis' : 'Vaga Única'}
+                                </span>
                             </div>
                         </div>
 
@@ -431,6 +498,17 @@ export default function VagasPage() {
                                             📍 {vaga.cidade}
                                         </span>
                                     )}
+
+                                    <span style={{ 
+                                        fontSize: '0.7rem', 
+                                        fontWeight: 800, 
+                                        background: 'rgba(34,197,94,0.1)', 
+                                        color: '#16a34a', 
+                                        padding: '3px 9px', 
+                                        borderRadius: '6px'
+                                    }}>
+                                        📦 {vaga.quantidade || 1} {vaga.quantidade > 1 ? 'VAGAS' : 'VAGA'}
+                                    </span>
                                 </div>
 
                                 {(vaga.salario_min || vaga.salario_max) && (
@@ -487,6 +565,12 @@ export default function VagasPage() {
                     </div>
                 )}
             </div>
+
+            <NorteToast 
+                message={toast.message} 
+                type={toast.type} 
+                onClose={() => setToast({ ...toast, message: '' })} 
+            />
         </div>
     );
 }

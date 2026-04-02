@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { User, Briefcase, List, LogOut, ChevronDown, FileText, Scale, Shield, Trash2, Brain, Compass } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import Navbar from './Navbar';
+import BrandLogo from './BrandLogo';
 
 export default function CandidateNavbar({ subtitle, profilePhoto }) {
     const navigate = useNavigate();
@@ -46,7 +47,7 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
     });
 
     return (
-        <Navbar icon={<Compass size={24} />} title="NORTE EMPREGOS" subtitle={subtitle}>
+        <Navbar icon={<BrandLogo size={24} />} title="NORTE EMPREGOS" subtitle={subtitle}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', position: 'relative' }} ref={menuRef}>
                 <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}

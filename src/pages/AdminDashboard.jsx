@@ -9,6 +9,7 @@ import {
     Plus, Download, Search, XCircle, Send, Lock, Menu, X, Compass
 } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
+import BrandLogo from '../components/layout/BrandLogo';
 
 const TABS = [
     { id: 'visao', label: 'Monitoramento', icon: Activity },
@@ -19,7 +20,8 @@ const TABS = [
     { id: 'automacao', label: 'Automação', icon: Mail },
     { id: 'logs', label: 'Auditoria', icon: Clock },
     { id: 'lgpd', label: 'Privacidade', icon: Shield },
-    { id: 'denuncias', label: 'Ouvidoria', icon: AlertTriangle }
+    { id: 'denuncias', label: 'Ouvidoria', icon: AlertTriangle },
+    { id: 'contratacoes', label: 'Contratações', icon: CheckCircle }
 ];
 
 const TrendChart = ({ data }) => {
@@ -123,7 +125,7 @@ export default function AdminDashboard() {
     const [trendData, setTrendData] = useState([]);
     const [metricasTempo, setMetricasTempo] = useState({ dau: 0, wau: 0 });
     const [ativosAgora, setAtivosAgora] = useState(0);
-    const [stats, setStats] = useState({ candidatos: 0, empresas: 0, perfisCompletos: 0 });
+    const [stats, setStats] = useState({ candidatos: 0, empresas: 0, perfisCompletos: 0, contratados: 0 });
 
     // Listas
     const [usuariosList, setUsuariosList] = useState([]);
@@ -143,6 +145,20 @@ export default function AdminDashboard() {
     const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
     const [broadcastProgress, setBroadcastProgress] = useState(null);
     
+    // [MOBILE STATE]
+    const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth <= 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+    
+    // Contratações
+    const [contratacoesList, setContratacoesList] = useState([]);
+    const [filtroContratado, setFiltroContratado] = useState('');
+    
     // Modais e Estados de Ação
     const [showNewEmpresaModal, setShowNewEmpresaModal] = useState(false);
     const [newEmpresaData, setNewEmpresaData] = useState({ razao_social: '', cnpj: '', email: '', password: '' });
@@ -152,6 +168,12 @@ export default function AdminDashboard() {
     const [vagaToClose, setVagaToClose] = useState(null);
     const [relatedDenunciaId, setRelatedDenunciaId] = useState(null);
     const [notification, setNotification] = useState(null);
+    
+    // Paginação Candidatos
+    const [pageCandidates, setPageCandidates] = useState(1);
+    const [pageSizeCand] = useState(20);
+    const [totalCand, setTotalCand] = useState(0);
+    const [searchCand, setSearchCand] = useState('');
 
     useEffect(() => {
         // Se já sabemos que não é admin, redirecionar se necessário
@@ -176,7 +198,8 @@ export default function AdminDashboard() {
         if (activeTab === 'lgpd') carregarLGPD();
         if (activeTab === 'denuncias') carregarDenuncias();
         if (activeTab === 'automacao') carregarAutomacao();
-    }, [activeTab, diasFiltro, customDates, filtroAutomacao, chartPeriod, userRole]);
+        if (activeTab === 'contratacoes') carregarContratacoes();
+    }, [activeTab, diasFiltro, customDates, filtroAutomacao, chartPeriod, userRole, pageCandidates, searchCand]);
 
     // O Tracker atualiza de 5 em 5 minutos para saber os online
     useEffect(() => {
@@ -247,17 +270,20 @@ export default function AdminDashboard() {
             const [
                 { count: candCount },
                 { count: empCount },
-                { count: completeCount }
+                { count: completeCount },
+                { count: hiredCount }
             ] = await Promise.all([
                 supabase.from('user_roles').select('*', { count: 'exact', head: true }).eq('role', 'candidato'),
                 supabase.from('user_roles').select('*', { count: 'exact', head: true }).eq('role', 'empresa'),
-                supabase.from('curriculos').select('*', { count: 'exact', head: true })
+                supabase.from('curriculos').select('*', { count: 'exact', head: true }),
+                supabase.from('candidaturas').select('*', { count: 'exact', head: true }).eq('status', 'contratado')
             ]);
 
             setStats({
                 candidatos: candCount || 0,
                 empresas: empCount || 0,
-                perfisCompletos: completeCount || 0
+                perfisCompletos: completeCount || 0,
+                contratados: hiredCount || 0
             });
 
         } catch (err) {
@@ -270,16 +296,30 @@ export default function AdminDashboard() {
     const carregarUsuarios = async () => {
         setLoading(true);
         try {
-            // Buscamos os currículos
-            const { data, error } = await supabase
+            const from = (pageCandidates - 1) * pageSizeCand;
+            const to = from + pageSizeCand - 1;
+
+            let query = supabase
                 .from('curriculos')
-                .select('user_id, nome, email, telefone, genero, ultimo_acesso:updated_at, resumo, experiencias, formacoes')
-                .order('updated_at', { ascending: false });
+                .select('user_id, nome, email, telefone, genero, data_nascimento, updated_at, resumo, experiencias, formacoes', { count: 'exact' });
+            
+            if (searchCand) {
+                query = query.ilike('nome', `%${searchCand}%`);
+            }
+
+            const { data, count, error } = await query
+                .order('updated_at', { ascending: false })
+                .range(from, to);
             
             if (error) throw error;
 
-            // Buscamos as candidaturas separadamente para contar
-            const { data: candData } = await supabase.from('candidaturas').select('user_id');
+            // Busca de candidaturas simplificada (contagem no banco seria ideal via View, mas manteremos a lógica aqui com limite de range)
+            const userIds = (data || []).map(u => u.user_id);
+            const { data: candData } = await supabase
+                .from('candidaturas')
+                .select('user_id')
+                .in('user_id', userIds);
+                
             const candCounts = {};
             if (candData) {
                 candData.forEach(c => {
@@ -287,14 +327,17 @@ export default function AdminDashboard() {
                 });
             }
 
-            const formatado = data.map(u => {
+            const formatado = (data || []).map(u => {
                 const perc = calcularCompletude(u);
                 const countCand = candCounts[u.user_id] || 0;
                 return { ...u, completude: perc, total_candidaturas: countCand };
             });
+
             setUsuariosList(formatado);
+            setTotalCand(count || 0);
         } catch (err) {
             console.error("Erro usuarios:", err);
+            notify('Erro ao carregar candidatos', 'error');
         } finally {
             setLoading(false);
         }
@@ -368,6 +411,63 @@ export default function AdminDashboard() {
     const carregarDenuncias = async () => {
         const { data } = await supabase.from('denuncias').select('*, vagas(titulo), empresas(razao_social), curriculos(nome, email)').order('created_at', { ascending: false });
         if (data) setDenuncias(data);
+    };
+
+    const carregarContratacoes = async () => {
+        setLoading(true);
+        try {
+            // 1. Busca as candidaturas (vagas e empresas funcionam pois têm FK)
+            const { data: cands, error: candsError } = await supabase
+                .from('candidaturas')
+                .select(`
+                    id,
+                    status,
+                    created_at,
+                    user_id,
+                    vagas (
+                        titulo,
+                        empresas (
+                            razao_social
+                        )
+                    )
+                `)
+                .eq('status', 'contratado')
+                .order('created_at', { ascending: false });
+
+            if (candsError) throw candsError;
+            if (!cands || cands.length === 0) {
+                setContratacoesList([]);
+                return;
+            }
+
+            // 2. Coleta IDs para o Join Manual
+            const userIds = [...new Set(cands.map(c => c.user_id))];
+
+            // 3. Busca dados de contato na tabela curriculos
+            const { data: profileData, error: profileError } = await supabase
+                .from('curriculos')
+                .select('user_id, nome, email, telefone')
+                .in('user_id', userIds);
+
+            if (profileError) throw profileError;
+
+            // 4. Mapeia para consulta rápida
+            const pMap = {};
+            (profileData || []).forEach(p => pMap[p.user_id] = p);
+
+            // 5. Une os dados no formato esperado pelo componente
+            const merged = cands.map(c => ({
+                ...c,
+                curriculos: pMap[c.user_id] || { nome: 'N/A', email: 'vazio@norte.com' }
+            }));
+
+            setContratacoesList(merged);
+        } catch (err) {
+            console.error('Erro ao carregar contratações:', err);
+            notify('Erro ao carregar lista de contratações', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const carregarAutomacao = async () => {
@@ -705,7 +805,7 @@ export default function AdminDashboard() {
 
     return (
         <div>
-            <Navbar icon={<Compass size={24} />} title="NORTE EMPREGOS" subtitle="ADMIN">
+            <Navbar icon={<BrandLogo size={24} />} title="NORTE EMPREGOS" subtitle="ADMIN">
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={handleLogout} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}><LogOut size={16} /> SAIR</button>
                 </div>
@@ -769,6 +869,10 @@ export default function AdminDashboard() {
                                     <div style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(251, 191, 36, 0.2)', textAlign: 'center' }}>
                                         <div style={{ color: '#fbbf24', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Vagas Ativas</div>
                                         <div style={{ fontSize: '2rem', fontWeight: 800 }}>{vagasList.filter(v => v.status === 'aberta').length}</div>
+                                    </div>
+                                    <div style={{ background: 'rgba(124, 58, 237, 0.1)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.2)', textAlign: 'center', boxShadow: '0 0 20px rgba(124, 58, 237, 0.1)' }}>
+                                        <div style={{ color: 'var(--neon-purple)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>🚀 Vidas Impactadas</div>
+                                        <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.contratados}</div>
                                     </div>
                                 </div>
 
@@ -880,76 +984,135 @@ export default function AdminDashboard() {
                 {activeTab === 'usuarios' && (
                     <div className="glass-panel animation-fade-in">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                            <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>👥 Base de Candidatos</h2>
-                            
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Filtrar / Ordenar:</span>
-                                <button onClick={() => {
-                                    const sorter = [...usuariosList].sort((a,b) => a.total_candidaturas - b.total_candidaturas);
-                                    setUsuariosList(sorter);
-                                }} className="neon-button secondary" style={{ margin: 0, padding: '6px 14px', width: 'auto', fontSize: '0.8rem' }}>
-                                    Menos Inscritos
-                                </button>
-                                <button onClick={() => {
-                                    const sorter = [...usuariosList].sort((a,b) => b.total_candidaturas - a.total_candidaturas);
-                                    setUsuariosList(sorter);
-                                }} className="neon-button secondary" style={{ margin: 0, padding: '6px 14px', width: 'auto', fontSize: '0.8rem' }}>
-                                    Mais Inscritos
-                                </button>
-                                <button onClick={carregarUsuarios} className="neon-button error" style={{ margin: 0, padding: '6px 14px', width: 'auto', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                    Resetar
-                                </button>
+                                <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>👥 Base de Candidatos</h2>
+                                <span style={{ background: 'rgba(56, 189, 248, 0.1)', color: 'var(--neon-blue)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>
+                                    {totalCand} TOTAL
+                                </span>
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, maxWidth: '600px', justifyContent: 'flex-end' }}>
+                                <div style={{ position: 'relative', flex: 1 }}>
+                                    <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                                    <input 
+                                        className="neon-input" 
+                                        placeholder="Buscar candidato por nome..." 
+                                        style={{ paddingLeft: '40px', marginBottom: 0 }}
+                                        value={searchCand}
+                                        onChange={(e) => {
+                                            setSearchCand(e.target.value);
+                                            setPageCandidates(1);
+                                        }}
+                                    />
+                                </div>
+                                
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <button onClick={() => {
+                                        const sorter = [...usuariosList].sort((a,b) => a.total_candidaturas - b.total_candidaturas);
+                                        setUsuariosList(sorter);
+                                    }} className="neon-button secondary" title="Menos Inscritos" style={{ margin: 0, padding: '8px', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--norte-green)' }}>
+                                        <Filter size={16} color="currentColor" />
+                                    </button>
+                                    <button onClick={carregarUsuarios} className="neon-button secondary" style={{ margin: 0, padding: '8px', width: '38px', height: '38px' }}>
+                                        <RefreshCw size={16} className={loading ? 'spin' : ''} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
                         {loading ? <p>Carregando usuários...</p> : (
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                                <thead style={{ background: '#f8fafc', color: '#475569' }}>
-                                    <tr>
-                                        <th style={{ padding: '15px' }}>Nome</th>
-                                        <th style={{ padding: '15px' }}>Gênero</th>
-                                        <th style={{ padding: '15px' }}>Contato</th>
-                                        <th style={{ padding: '15px' }}>Vagas Inscritas</th>
-                                        <th style={{ padding: '15px' }}>Completude</th>
-                                        <th style={{ padding: '15px' }}>Último Acesso</th>
-                                        <th style={{ padding: '15px' }}>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {usuariosList.map(u => (
-                                        <tr key={u.user_id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                                            <td style={{ padding: '15px', fontWeight: 600 }}>{u.nome}</td>
-                                            <td style={{ padding: '15px' }}>{u.genero || '—'}</td>
-                                            <td style={{ padding: '15px', color: '#64748b' }}>{u.email}<br/>{u.telefone}</td>
-                                            <td style={{ padding: '15px' }}>
-                                                <span style={{ 
-                                                    padding: '4px 10px', 
-                                                    borderRadius: '20px', 
-                                                    fontSize: '0.85rem', 
-                                                    fontWeight: 700,
-                                                    background: u.total_candidaturas === 0 ? '#fee2e2' : '#f0f9ff',
-                                                    color: u.total_candidaturas === 0 ? '#ef4444' : '#0284c7'
-                                                }}>
-                                                    {u.total_candidaturas} {u.total_candidaturas === 1 ? 'vaga' : 'vagas'}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '15px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <div style={{ width: '100px', height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
-                                                        <div style={{ width: `${u.completude}%`, height: '100%', background: u.completude >= 80 ? '#22c55e' : (u.completude >= 40 ? '#eab308' : '#ef4444') }}></div>
-                                                    </div>
-                                                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{u.completude}%</span>
-                                                </div>
-                                            </td>
-                                            <td style={{ padding: '15px', color: '#64748b' }}>{new Date(u.ultimo_acesso).toLocaleDateString()}</td>
-                                            <td style={{ padding: '15px', gap: '8px', display: 'flex' }}>
-                                                <button onClick={() => navigate(`/cv-preview/${u.user_id}`)} className="neon-button secondary" style={{ margin: 0, padding: '6px 12px', fontSize: '0.75rem', width: 'auto' }}>Ver CV</button>
-                                                <button className="neon-button error" style={{ margin: 0, padding: '6px 12px', fontSize: '0.75rem', width: 'auto', background: '#fee2e2', color: '#ef4444', border: '1px solid #ef4444' }}>Bloquear</button>
-                                            </td>
+                            <div className="table-responsive">
+                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                                    <thead style={{ background: '#f8fafc', color: '#475569' }}>
+                                        <tr>
+                                            <th style={{ padding: '15px' }}>Nome</th>
+                                            <th style={{ padding: '15px' }}>Gênero</th>
+                                            <th style={{ padding: '15px' }}>Contato</th>
+                                            <th style={{ padding: '15px' }}>Vagas Inscritas</th>
+                                            <th style={{ padding: '15px' }}>Completude</th>
+                                            <th style={{ padding: '15px' }}>Último Acesso</th>
+                                            <th style={{ padding: '15px' }}>Ações</th>
                                         </tr>
+                                    </thead>
+                                    <tbody>
+                                        {usuariosList.map(u => (
+                                            <tr key={u.user_id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                                                <td style={{ padding: '15px', fontWeight: 600 }} data-label="NOME">{u.nome}</td>
+                                                <td style={{ padding: '15px' }} data-label="GÊNERO">{u.genero || '—'}</td>
+                                                <td style={{ padding: '15px', color: '#64748b' }} data-label="CONTATO">{u.email}<br/>{u.telefone}</td>
+                                                <td style={{ padding: '15px' }} data-label="VAGAS">
+                                                    <span style={{ 
+                                                        padding: '4px 10px', 
+                                                        borderRadius: '20px', 
+                                                        fontSize: '0.85rem', 
+                                                        fontWeight: 700,
+                                                        background: u.total_candidaturas === 0 ? '#fee2e2' : '#f0f9ff',
+                                                        color: u.total_candidaturas === 0 ? '#ef4444' : '#0284c7'
+                                                    }}>
+                                                        {u.total_candidaturas} {u.total_candidaturas === 1 ? 'vaga' : 'vagas'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '15px' }} data-label="PERFIL">
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: isMobile ? 'flex-end' : 'flex-start' }}>
+                                                        <div style={{ width: '80px', height: '8px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
+                                                            <div style={{ width: `${u.completude}%`, height: '100%', background: u.completude >= 80 ? '#22c55e' : (u.completude >= 40 ? '#eab308' : '#ef4444') }}></div>
+                                                        </div>
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{u.completude}%</span>
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '15px', color: '#64748b' }} data-label="ÚLTIMO">{new Date(u.updated_at).toLocaleDateString()}</td>
+                                                <td style={{ padding: '15px', gap: '8px', display: 'flex' }} className="actions-cell">
+                                                    <button onClick={() => navigate(`/cv-preview/${u.user_id}`)} className="neon-button secondary" style={{ margin: 0, padding: '6px 12px', fontSize: '0.75rem', width: 'auto' }}>Ver CV</button>
+                                                    <button className="neon-button error" style={{ margin: 0, padding: '6px 12px', fontSize: '0.75rem', width: 'auto', background: '#fee2e2', color: '#ef4444', border: '1px solid #ef4444' }}>Bloquear</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* PAGINAÇÃO NUMERADA ADMIN */}
+                        {!loading && totalCand > pageSizeCand && (
+                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '2rem', flexWrap: 'wrap' }}>
+                                <button 
+                                    onClick={() => setPageCandidates(p => Math.max(1, p - 1))}
+                                    disabled={pageCandidates === 1}
+                                    className="neon-button secondary"
+                                    style={{ width: 'auto', margin: 0, padding: '8px 16px' }}
+                                >
+                                    Anterior
+                                </button>
+
+                                {Array.from({ length: Math.ceil(totalCand / pageSizeCand) }, (_, i) => i + 1)
+                                    .filter(p => p === 1 || p === Math.ceil(totalCand / pageSizeCand) || Math.abs(p - pageCandidates) <= 2)
+                                    .map((p, idx, arr) => (
+                                        <div key={p} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {idx > 0 && arr[idx - 1] !== p - 1 && <span style={{ color: 'var(--text-muted)' }}>...</span>}
+                                            <button
+                                                onClick={() => setPageCandidates(p)}
+                                                className={pageCandidates === p ? "neon-button" : "neon-button secondary"}
+                                                style={{ 
+                                                    width: '40px', height: '40px', margin: 0, padding: 0,
+                                                    background: pageCandidates === p ? 'var(--neon-blue)' : 'transparent',
+                                                    color: pageCandidates === p ? '#000' : 'var(--text-main)',
+                                                    borderColor: pageCandidates === p ? 'var(--neon-blue)' : 'rgba(255,255,255,0.1)'
+                                                }}
+                                            >
+                                                {p}
+                                            </button>
+                                        </div>
                                     ))}
-                                </tbody>
-                            </table>
+
+                                <button 
+                                    onClick={() => setPageCandidates(p => Math.min(Math.ceil(totalCand / pageSizeCand), p + 1))}
+                                    disabled={pageCandidates >= Math.ceil(totalCand / pageSizeCand)}
+                                    className="neon-button secondary"
+                                    style={{ width: 'auto', margin: 0, padding: '8px 16px' }}
+                                >
+                                    Próxima
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}
@@ -1134,44 +1297,44 @@ export default function AdminDashboard() {
                                 </div>
 
                                 <h3 style={{ marginBottom: '1.5rem' }}>🎯 Últimos Disparos</h3>
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                        <thead>
-                                            <tr style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)' }}>
-                                                <th style={{ padding: '12px' }}>Candidato</th>
-                                                <th style={{ padding: '12px' }}>Gatilho</th>
-                                                <th style={{ padding: '12px' }}>Status</th>
-                                                <th style={{ padding: '12px' }}>Enviado em</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {recentNotifications.map(n => (
-                                                <tr key={n.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                    <td style={{ padding: '12px', fontWeight: 600 }}>{n.candidato_email || 'Usuário'}</td>
-                                                    <td style={{ padding: '12px' }}>
-                                                        <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }}>
-                                                            {n.tipo === 'sem_curriculo' ? '📝 Cadastro Incompleto' : '💼 Sem Candidaturas'}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '12px' }}>
-                                                        <span style={{ 
-                                                            color: n.status === 'opened' ? '#4ade80' : (n.status === 'clicked' ? 'var(--neon-blue)' : 'var(--text-muted)'),
-                                                            display: 'flex', alignItems: 'center', gap: '5px'
-                                                        }}>
-                                                            {n.status === 'opened' && <CheckCircle size={14} />}
-                                                            {n.status === 'clicked' && <Activity size={14} />}
-                                                            {n.status.toUpperCase()}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{new Date(n.enviado_em).toLocaleString()}</td>
-                                                </tr>
-                                            ))}
-                                            {recentNotifications.length === 0 && (
-                                                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Nenhum disparo registrado ainda.</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        <div className="table-responsive">
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                <thead>
+                                                    <tr style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)' }}>
+                                                        <th style={{ padding: '12px' }}>Candidato</th>
+                                                        <th style={{ padding: '12px' }}>Gatilho</th>
+                                                        <th style={{ padding: '12px' }}>Status</th>
+                                                        <th style={{ padding: '12px' }}>Enviado em</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {recentNotifications.map(n => (
+                                                        <tr key={n.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                            <td style={{ padding: '12px', fontWeight: 600 }} data-label="E-MAIL">{n.candidato_email || 'Usuário'}</td>
+                                                            <td style={{ padding: '12px' }} data-label="TIPO">
+                                                                <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }}>
+                                                                    {n.tipo === 'sem_curriculo' ? '📝 Cadastro' : '💼 Vagas'}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '12px' }} data-label="STATUS">
+                                                                <span style={{ 
+                                                                    color: n.status === 'opened' ? '#4ade80' : (n.status === 'clicked' ? 'var(--neon-blue)' : 'var(--text-muted)'),
+                                                                    display: 'flex', alignItems: 'center', gap: '5px', justifyContent: isMobile ? 'flex-end' : 'flex-start'
+                                                                }}>
+                                                                    {n.status === 'opened' && <CheckCircle size={14} />}
+                                                                    {n.status === 'clicked' && <Activity size={14} />}
+                                                                    {n.status.toUpperCase()}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '12px', color: 'var(--text-muted)' }} data-label="DATA">{new Date(n.enviado_em).toLocaleDateString()}</td>
+                                                        </tr>
+                                                    ))}
+                                                    {recentNotifications.length === 0 && (
+                                                        <tr><td colSpan={4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Nenhum disparo registrado ainda.</td></tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
                             </>
                         )}
                     </div>
@@ -1370,6 +1533,90 @@ export default function AdminDashboard() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                )}
+
+                {activeTab === 'contratacoes' && (
+                    <div className="glass-panel animation-fade-in">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div>
+                                <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>🏆 Mural de Conquistas</h2>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Relatório consolidado de candidatos que efetivaram contratação pelo sistema</p>
+                            </div>
+                            <div className="input-group" style={{ marginBottom: 0, width: '300px' }}>
+                                <div style={{ position: 'relative' }}>
+                                    <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '14px' }} />
+                                    <input className="neon-input" style={{ paddingLeft: '38px' }} placeholder="Filtrar por nome ou empresa..." value={filtroContratado} onChange={e => setFiltroContratado(e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {loading ? <p>Carregando contratações...</p> : (
+                            <div className="table-responsive">
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                                        <tr>
+                                            <th style={{ padding: '1rem' }}>Candidato</th>
+                                            <th style={{ padding: '1rem' }}>Vaga</th>
+                                            <th style={{ padding: '1rem' }}>Empresa</th>
+                                            <th style={{ padding: '1rem' }}>Data do Sucesso</th>
+                                            <th style={{ padding: '1rem' }}>Contato</th>
+                                            <th style={{ padding: '1rem' }}>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {contratacoesList.filter(c => 
+                                            c.curriculos?.nome?.toLowerCase().includes(filtroContratado.toLowerCase()) || 
+                                            c.vagas?.empresas?.razao_social?.toLowerCase().includes(filtroContratado.toLowerCase())
+                                        ).map(c => (
+                                            <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <td style={{ padding: '1rem' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(56,189,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-blue)', fontWeight: 800 }}>
+                                                            {c.curriculos?.nome?.substring(0, 1)}
+                                                        </div>
+                                                        <div>
+                                                            <div style={{ fontWeight: 700 }}>{c.curriculos?.nome}</div>
+                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.curriculos?.email}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    <span style={{ fontWeight: 600, color: 'var(--norte-teal)' }}>{c.vagas?.titulo}</span>
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    <span style={{ fontWeight: 600 }}>{c.vagas?.empresas?.razao_social}</span>
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    <div style={{ fontSize: '0.9rem' }}>{new Date(c.created_at).toLocaleDateString()}</div>
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    <span style={{ fontSize: '0.85rem' }}>{c.curriculos?.telefone || '—'}</span>
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    <button 
+                                                        onClick={() => navigate(`/cv-preview/${c.user_id}`)} 
+                                                        className="neon-button secondary" 
+                                                        style={{ margin: 0, padding: '6px 12px', fontSize: '0.7rem', width: 'auto' }}
+                                                    >
+                                                        VER PERFIL
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {contratacoesList.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                                    <CheckCircle size={40} style={{ opacity: 0.3, marginBottom: '1rem' }} />
+                                                    <br />Nenhuma contratação oficializada no período.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

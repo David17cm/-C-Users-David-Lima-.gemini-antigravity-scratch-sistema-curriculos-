@@ -1,781 +1,499 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Save, User, Camera, BookOpen, Tag, GraduationCap, Plus, Trash2, Briefcase, Award, AlertCircle, FileText, Brain, RefreshCw, X, Gift, Share2, Copy, Compass } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { 
+    User, Camera, BookOpen, Tag, GraduationCap, 
+    Plus, Trash2, Briefcase, FileText, Brain, X, ChevronDown, ChevronUp, Award, Save, CheckCircle
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import CandidateNavbar from '../components/layout/CandidateNavbar';
 import DiscQuizModal from '../components/modals/DiscQuizModal';
-const TURNOS = ['Manhã', 'Tarde', 'Noite'];
-const SEMESTRES = ['1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°'];
-const ANOS_EM = ['1° Ano', '2° Ano', '3° Ano'];
-const CNH_CATS = ['A', 'B', 'AB', 'ABD'];
-const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-const ANOS = Array.from({ length: 40 }, (_, i) => (new Date().getFullYear() - i).toString());
-
-// Máscara de telefone: (99) 99999-9999
-function maskPhone(value) {
-    const nums = value.replace(/\D/g, '').slice(0, 11);
-    if (nums.length <= 10)
-        return nums.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
-    return nums.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
-}
+import { NorteToast } from '../components/ui/NorteToast';
 
 const EMPTY_FORM = {
     nome: '', dataNascimento: '', genero: '', email: '', telefone: '', cidade: '', resumo: '',
-    endereco: '', bairro: '', numero: '',
-    foto_url: '',
-    habilidades: [],
-    cursos_prof: [],
-    experiencias: [],
-    formacoes: [],
-    ensino_medio: { status: '', ano_cursando: '', turno: '', ano_conclusao: '' },
-    cnh: { possui: false, categorias: [] },
-    perfil_disc: '',
-    codigo_indicacao: ''
+    endereco: '', bairro: '', numero: '', foto_url: '',
+    habilidades: [], cursos_prof: [], experiencias: [], formacoes: [],
+    ensino_medio: { status: '', ano_cursando: '', ano_conclusao: '', fundamental_completo: false },
+    cnh: { possui: false, categorias: [] }, possui_transporte: false,
+    perfil_disc: '', codigo_indicacao: ''
 };
+
+const SKILLS_SUGGESTIONS = [
+    "Comunicação", "Trabalho em equipe", "Proatividade", "Organização", 
+    "Responsabilidade", "Adaptabilidade", "Inteligência emocional", "Comprometimento", 
+    "Pacote Office", "Atendimento ao cliente", "Vendas", "Negociação",
+    "Liderança", "Vontade de aprender", "Pontualidade", "Resiliência"
+];
+
+const MESES = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+function maskPhone(value) {
+    const nums = value.replace(/\D/g, '').slice(0, 11);
+    if (nums.length <= 10) return nums.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+    return nums.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+}
 
 export default function Dashboard() {
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [autoSaving, setAutoSaving] = useState(false);
     const [uploadingFoto, setUploadingFoto] = useState(false);
-    const [errors, setErrors] = useState({});
-    const [toastMsg, setToastMsg] = useState('');
-    const [toastError, setToastError] = useState('');
+    const [toast, setToast] = useState({ message: '', type: 'info' });
     const [habilidadeInput, setHabilidadeInput] = useState('');
     const [showDiscQuiz, setShowDiscQuiz] = useState(false);
     const [openSections, setOpenSections] = useState({
-        foto: true,
-        basico: true,
-        resumo: false,
-        habilidades: false,
-        cursos: false,
-        ensinoMedio: false,
-        formacao: false,
-        cnh: false,
-        experiencia: false,
-        disc: false
+        foto: true, basico: true, resumo: true, habilidades: true, 
+        escolaridade: true, formacao: true, cursos: true, experiencias: true, cnh: true
     });
+
     const navigate = useNavigate();
-    const location = useLocation();
-    const { user, loading: authLoading } = useAuth();
+    const { user, signOut } = useAuth();
     const fileInputRef = useRef();
-
     const [formData, setFormData] = useState(EMPTY_FORM);
-    const [lastSavedData, setLastSavedData] = useState(null);
-    const [autoSaving, setAutoSaving] = useState(false);
-    const isInitialLoad = useRef(true); // Bloqueia autosave até o fetch terminar
+    const isInitialLoad = useRef(true);
     const saveTimeoutRef = useRef(null);
-    const [referralCount, setReferralCount] = useState(0);
-
-    useEffect(() => {
-        if (location.state?.openDisc) {
-            setShowDiscQuiz(true);
-            setOpenSections(prev => ({ ...prev, disc: true }));
-            // Limpa o state para não disparar no reload
-            window.history.replaceState({}, document.title);
-        }
-    }, [location.state]);
 
     useEffect(() => {
         if (user) {
             setFormData(prev => ({ ...prev, email: user.email }));
             fetchCurriculo(user.id);
-            fetchReferralCount(user.id);
         }
     }, [user]);
 
-    const fetchReferralCount = async (userId) => {
-        const { data, error } = await supabase.from('indicacoes').select('id').eq('quem_indicou', userId);
-        if (error) {
-            console.error('Erro ao contar indicações:', error);
-            return;
-        }
-        setReferralCount(data?.length || 0);
-    };
-
-    // Lógica de Autosave (Debounced)
     useEffect(() => {
-        if (!user || loading || authLoading || isInitialLoad.current) return;
-        
-        // Evita salvamento se os dados forem idênticos ao último salvo
-        if (lastSavedData && JSON.stringify(formData) === JSON.stringify(lastSavedData)) return;
-
+        if (isInitialLoad.current || !user) return;
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = setTimeout(() => {
-            performAutosave();
-        }, 3000); // 3 segundos para dar mais folga no mobile
-        return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
+        saveTimeoutRef.current = setTimeout(() => performAutosave(), 3000);
+        return () => clearTimeout(saveTimeoutRef.current);
     }, [formData]);
-
-    const preparePayload = (data) => {
-        return {
-            user_id: user.id,
-            nome: data.nome,
-            email: data.email,
-            telefone: data.telefone,
-            cidade: data.cidade,
-            endereco: data.endereco,
-            bairro: data.bairro,
-            numero: data.numero,
-            data_nascimento: data.dataNascimento,
-            genero: data.genero,
-            resumo: data.resumo,
-            foto_url: data.foto_url,
-            habilidades: data.habilidades || [],
-            // cursos_prof é text[] no banco, salvar como string JSON se for objeto
-            cursos_prof: (data.cursos_prof || []).map(c => typeof c === 'object' ? JSON.stringify(c) : c),
-            // experiencias e formacoes são jsonb no banco, enviar como array de objetos
-            experiencias: data.experiencias || [],
-            formacoes: data.formacoes || [],
-            ensino_medio: data.ensino_medio || {},
-            cnh: data.cnh || {},
-            perfil_disc: data.perfil_disc,
-            codigo_indicacao: data.codigo_indicacao,
-            updated_at: new Date().toISOString(),
-        };
-    };
-
-    const performAutosave = async () => {
-        if (!user || loading || authLoading) return;
-        
-        // Captura o snapshot exato dos dados que vamos tentar salvar
-        const dataSnapshot = JSON.parse(JSON.stringify(formData));
-        setAutoSaving(true);
-        
-        try {
-            const payload = preparePayload(dataSnapshot);
-            const { error } = await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
-            if (error) throw error;
-            
-            // Só marcar como salvo se o sistema não mudou os dados no meio do caminho
-            setLastSavedData(dataSnapshot);
-        } catch (err) {
-            console.error('Autosave falhou técnico:', { 
-                message: err.message, 
-                code: err.code,
-                detail: err.details,
-                timestamp: new Date().toISOString(),
-                connection: navigator.onLine ? 'Online' : 'Offline'
-            });
-        } finally {
-            setAutoSaving(false);
-        }
-    };
 
     const fetchCurriculo = async (userId) => {
         try {
-            const { data } = await supabase.from('curriculos').select('*').eq('user_id', userId).limit(1).maybeSingle();
-            const parseArray = (arr, type) => {
-                if (!Array.isArray(arr)) return [];
-                return arr.map(item => {
-                    if (typeof item === 'string') {
-                        if (item.trim().startsWith('{')) {
-                            try { return JSON.parse(item); } catch (e) { /* fallback below */ }
-                        }
-                        if (type === 'cursos') return { nome: item, instituicao: '', status: 'completo', observacao: '' };
-                        if (type === 'experiencias') return { empresa: item, cargo: '', atual: false, descricao: '', mes_inicio: '', ano_inicio: '', mes_fim: '', ano_fim: '' };
-                        if (type === 'formacoes') return { instituicao: item, curso: '', status: 'cursando' };
-                    }
-                    return item;
-                });
-            };
-
+            const { data } = await supabase.from('curriculos').select('*').eq('user_id', userId).maybeSingle();
             if (data) {
-                const cnhRaw = data.cnh || {};
-                const emRaw = data.ensino_medio || {};
-                let finalCode = data.codigo_indicacao;
-                
-                // Gerar código se não existir
-                if (!finalCode) {
-                    const randomSuf = Math.random().toString(36).substring(2, 6).toUpperCase();
-                    const baseName = (data.nome || 'USER').split(' ')[0].toUpperCase();
-                    finalCode = `${baseName}-${randomSuf}`;
-                    // Salva o novo código no banco
-                    await supabase.from('curriculos').update({ codigo_indicacao: finalCode }).eq('user_id', userId);
-                }
-
-                const loadedData = {
-                    nome: data.nome || '',
+                setFormData({
+                    ...EMPTY_FORM,
+                    ...data,
                     dataNascimento: data.data_nascimento || '',
-                    genero: data.genero || '',
-                    email: data.email || '',
-                    telefone: data.telefone || '',
-                    cidade: data.cidade || '',
-                    endereco: data.endereco || '',
-                    bairro: data.bairro || '',
-                    numero: data.numero || '',
-                    resumo: data.resumo || '',
-                    foto_url: data.foto_url || '',
-                    habilidades: Array.isArray(data.habilidades) ? data.habilidades : [],
-                    cursos_prof: parseArray(data.cursos_prof, 'cursos'),
-                    experiencias: parseArray(data.experiencias, 'experiencias'),
-                    formacoes: parseArray(data.formacoes, 'formacoes'),
-                    ensino_medio: { status: emRaw.status || '', ano_cursando: emRaw.ano_cursando || '', turno: emRaw.turno || '', ano_conclusao: emRaw.ano_conclusao || '' },
-                    cnh: { possui: cnhRaw.possui === true, categorias: Array.isArray(cnhRaw.categorias) ? cnhRaw.categorias : [] },
-                    perfil_disc: data.perfil_disc || '',
-                    codigo_indicacao: finalCode
-                };
-                setFormData(loadedData);
-                setLastSavedData(JSON.parse(JSON.stringify(loadedData)));
+                    habilidades: data.habilidades || [],
+                    experiencias: data.experiencias || [],
+                    formacoes: data.formacoes || [],
+                    cursos_prof: data.cursos_prof || [],
+                    ensino_medio: data.ensino_medio || EMPTY_FORM.ensino_medio,
+                    cnh: data.cnh || EMPTY_FORM.cnh,
+                });
             }
-        } catch (err) { 
-            console.error('Erro ao carregar currículo:', err); 
-        } finally { 
-            setLoading(false); 
-            // Pequeno delay para garantir que o estado do React estabilizou antes de liberar o autosave
-            setTimeout(() => { isInitialLoad.current = false; }, 1000);
+        } finally {
+            setLoading(false);
+            setTimeout(() => isInitialLoad.current = false, 1000);
         }
+    };
+
+    const performAutosave = async () => {
+        setAutoSaving(true);
+        try {
+            const payload = { ...formData, user_id: user.id, data_nascimento: formData.dataNascimento, updated_at: new Date().toISOString() };
+            delete payload.dataNascimento;
+            await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
+        } finally { setAutoSaving(false); }
     };
 
     const handleFotoUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-        if (!ALLOWED_TYPES.includes(file.type)) {
-            alert('Tipo de arquivo inválido. Envie apenas imagens JPG, PNG ou WebP.');
-            return;
-        }
         setUploadingFoto(true);
         try {
-            const ext = file.type.split('/')[1];
-            const path = `${user.id}/avatar.${ext}`;
-            await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
+            const ext = file.name.split('.').pop();
+            const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+            await supabase.storage.from('avatars').upload(path, file);
             const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-            setFormData(prev => ({ ...prev, foto_url: `${data.publicUrl}?t=${Date.now()}` }));
-        } catch (err) { alert('Erro no upload: ' + err.message); }
-        finally { setUploadingFoto(false); }
+            setFormData(prev => ({ ...prev, foto_url: data.publicUrl }));
+        } finally { setUploadingFoto(false); }
     };
 
-    const validate = () => {
-        const e = {};
-        if (!formData.nome.trim()) e.nome = 'Nome obrigatório';
-        if (!formData.dataNascimento) e.dataNascimento = 'Data obrigatória';
-        if (!formData.genero) e.genero = 'Gênero obrigatório';
-        if (!formData.email.trim()) e.email = 'E-mail obrigatório';
-        if (!formData.telefone.trim()) e.telefone = 'Telefone obrigatório';
-        if (!formData.bairro.trim()) e.bairro = 'Bairro obrigatório';
-        setErrors(e);
-        return Object.keys(e).length === 0;
-    };
+    const toggleSection = (s) => setOpenSections(p => ({ ...p, [s]: !p[s] }));
 
-    const handleSave = async (e) => {
-        if (e) e.preventDefault();
-        if (!validate()) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-        
-        const dataSnapshot = JSON.parse(JSON.stringify(formData));
-        setSaving(true);
-        try {
-            const payload = preparePayload(dataSnapshot);
-            const { error } = await supabase.from('curriculos').upsert(payload, { onConflict: 'user_id' });
-            if (error) throw error;
-            setToastMsg('Currículo salvo com sucesso!');
-            setLastSavedData(dataSnapshot);
-            setTimeout(() => setToastMsg(''), 3500);
-        } catch (err) {
-            setToastError(`Erro ao salvar: ${err.message}`);
-            setTimeout(() => setToastError(''), 3500);
-        }
-        finally { setSaving(false); }
-    };
-
-    const toggleSection = (key) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
-
-    const sectionHdr = (icon, title, sectionKey) => (
-        <div
-            onClick={() => sectionKey ? toggleSection(sectionKey) : null}
-            style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                color: 'var(--norte-dark-green)', borderBottom: '1px solid #e5e7eb',
-                paddingBottom: '10px', marginBottom: (sectionKey && !openSections[sectionKey]) ? '0' : '20px',
-                cursor: sectionKey ? 'pointer' : 'default', userSelect: 'none'
+    const SectionHeader = ({ icon: Icon, title, id }) => (
+        <div 
+            onClick={() => toggleSection(id)}
+            style={{ 
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+                padding: '1.2rem', cursor: 'pointer', borderBottom: openSections[id] ? '1px solid #f1f5f9' : 'none',
+                background: '#fff', borderTopLeftRadius: '12px', borderTopRightRadius: '12px'
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {icon}<h3 style={{ margin: 0, fontSize: '1.2rem', textTransform: 'uppercase' }}>{title}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Icon size={20} color="var(--norte-green)" />
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--norte-dark-green)', textTransform: 'uppercase' }}>{title}</h3>
             </div>
-            {sectionKey && (
-                <div style={{
-                    transform: openSections[sectionKey] ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.3s ease',
-                    fontSize: '1rem', color: 'var(--text-muted)'
-                }}>
-                    ▼
-                </div>
-            )}
+            {openSections[id] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </div>
     );
 
-    if (loading || authLoading) {
-        return (
-            <div className="container" style={{ marginTop: '2rem' }}>
-                <Skeleton width="300px" height="32px" style={{ marginBottom: '1rem' }} />
-                <Skeleton width="500px" height="20px" style={{ marginBottom: '2rem' }} />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
-                    <CardSkeleton /> <CardSkeleton /> <CardSkeleton />
-                </div>
-            </div>
-        );
-    }
+    const handleAddSkill = (skill) => {
+        if (!formData.habilidades.includes(skill)) {
+            setFormData(prev => ({ ...prev, habilidades: [...prev.habilidades, skill] }));
+        }
+    };
 
-    const inp = (field) => ({ className: `neon-input${errors[field] ? ' error' : ''}` });
-    const errMsg = (field) => errors[field] ? <span style={{ color: '#ff4444', fontSize: '0.78rem', marginTop: '4px', display: 'block' }}>{errors[field]}</span> : null;
+    const handleRemoveSkill = (skill) => {
+        setFormData(prev => ({ ...prev, habilidades: prev.habilidades.filter(s => s !== skill) }));
+    };
+
+    const handleSaveManual = async () => {
+        await performAutosave();
+        setToast({ message: 'Currículo salvo com sucesso! 🛡️', type: 'success' });
+        setTimeout(() => navigate('/cv-preview'), 1500);
+    };
+
+    if (loading) return <div className="container" style={{padding:'2rem'}}><CardSkeleton /><CardSkeleton /></div>;
 
     return (
-        <div>
+        <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: '100px' }}>
             <CandidateNavbar subtitle={autoSaving ? 'Salvando...' : 'Salvo'} profilePhoto={formData.foto_url} />
 
-            {toastMsg && <div className="toast success">{toastMsg}</div>}
-            {toastError && <div className="toast error">{toastError}</div>}
-
-            <DiscQuizModal 
-                isOpen={showDiscQuiz} 
-                onClose={() => setShowDiscQuiz(false)} 
-                onFinish={(results) => {
-                    setFormData(prev => ({ ...prev, perfil_disc: JSON.stringify(results) }));
-                    setShowDiscQuiz(false);
-                }} 
-            />
-
-            <div className="container" style={{ marginTop: '2rem' }}>
-                {location.state?.alertCV && (
-                    <div className="alert-box">
-                        <AlertCircle size={24} color="var(--norte-green)" />
-                        <div>
-                            <strong>Currículo Incompleto</strong>
-                            <p>Você precisa preencher o seu currículo antes de candidatar.</p>
-                        </div>
-                    </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-                    <div>
-                        <h2 style={{ color: 'var(--neon-purple)', margin: 0 }}>MEU PERFIL PROFISSIONAL</h2>
-                        <p style={{ color: 'var(--text-muted)', margin: 0 }}>Mantenha seus dados atualizados para atrair empresas.</p>
-                    </div>
-                    <button type="button" onClick={() => navigate('/cv-preview')} className="neon-button secondary" style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <FileText size={20} /> VER PDF
+            <div className="container" style={{ marginTop: '2rem', padding: '0 15px' }}>
+                <div style={{ marginBottom: '2rem' }}>
+                <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--norte-dark-green)', margin: 0 }}>MANTENHA SEU PERFIL ATUALIZADO 🌿</h2>
+                    <button 
+                        onClick={() => navigate('/cv-preview')}
+                        className="neon-button secondary"
+                        style={{ width: 'auto', margin: 0, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}
+                    >
+                        <FileText size={18} /> VISUALIZAR MEU CURRÍCULO 🚀
                     </button>
                 </div>
-
-                {/* --- SEÇÃO INDIQUE E GANHE (OCULTO PARA DEPLOY) --- */}
-                {/* 
-                <div className="glass-panel" style={{
-                    marginBottom: '2rem',
-                    background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(0, 240, 255, 0.05) 100%)',
-                    border: '1px solid rgba(124, 58, 237, 0.3)',
-                    position: 'relative',
-                    overflow: 'hidden'
-                }}>
-                    <div style={{ position: 'absolute', top: '-20px', right: '-20px', opacity: 0.1 }}>
-                        <Gift size={120} color="var(--neon-purple)" />
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                        <div style={{ background: 'var(--neon-purple)', padding: '12px', borderRadius: '12px', color: '#000', display: 'flex' }}>
-                            <Share2 size={24} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: '250px' }}>
-                            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.2rem', fontWeight: 900 }}>INDIQUE AMIGOS E GANHE DESTAQUE! 🎁</h3>
-                            <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                Compartilhe seu link exclusivo. Cada amigo que se cadastrar aumenta sua visibilidade para empresas.
-                            </p>
-                        </div>
-                        <div style={{ textAlign: 'center', padding: '0 1rem' }}>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--neon-purple)' }}>{referralCount}</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Amigos Indicados</div>
-                        </div>
-                    </div>
-
-                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <div style={{ flex: 1, background: 'rgba(0,0,0,0.3)', padding: '10px 15px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.85rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {`${window.location.origin}/auth?mode=signup&ref=${formData.codigo_indicacao}`}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                navigator.clipboard.writeText(`${window.location.origin}/auth?mode=signup&ref=${formData.codigo_indicacao}`);
-                                setToastMsg('Link de indicação copiado! 🚀');
-                                setTimeout(() => setToastMsg(''), 3000);
-                            }}
-                            className="neon-button secondary"
-                            style={{ width: 'auto', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
-                        >
-                            <Copy size={16} /> COPIAR LINK
-                        </button>
-                    </div>
                 </div>
-                */}
 
-                <form onSubmit={handleSave} noValidate>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    
                     {/* FOTO */}
-                    <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                        {sectionHdr(<Camera size={20} />, 'FOTO DE PERFIL', 'foto')}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={Camera} title="Foto de Perfil" id="foto" />
                         {openSections.foto && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-                                <div className="avatar-preview">
-                                    {formData.foto_url ? <img src={formData.foto_url} alt="Foto" /> : <User size={40} />}
+                            <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                                <div style={{ width: '100px', height: '100px', borderRadius: '50%', overflow: 'hidden', border: '3px solid #fff', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                    <img src={formData.foto_url || 'https://via.placeholder.com/150'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Perfil" />
                                 </div>
-                                <div>
-                                    <p style={{ color: 'var(--neon-purple)', fontSize: '0.8rem', marginBottom: '1rem', fontWeight: 600 }}>💡 Esta foto também aparecerá no seu menu de navegação.</p>
-                                    <input type="file" ref={fileInputRef} accept="image/*" onChange={handleFotoUpload} style={{ display: 'none' }} />
-                                    <button type="button" onClick={() => fileInputRef.current.click()} className="neon-button secondary" style={{ width: 'auto' }} disabled={uploadingFoto}>
-                                        {uploadingFoto ? 'ENVIANDO...' : '📷 ESCOLHER FOTO'}
+                                <div style={{ flex: 1 }}>
+                                    <input type="file" ref={fileInputRef} hidden onChange={handleFotoUpload} />
+                                    <button onClick={() => fileInputRef.current.click()} type="button" className="neon-button secondary" style={{ width: 'auto' }}>
+                                        {uploadingFoto ? 'ENVIANDO...' : '📷 ADICIONAR MINHA MELHOR FOTO'}
                                     </button>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* DADOS BÁSICOS */}
-                    <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                        {sectionHdr(<User size={20} />, 'DADOS BÁSICOS', 'basico')}
+                    {/* DADOS PESSOAIS */}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={User} title="Dados Pessoais" id="basico" />
                         {openSections.basico && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
-                                <div className="input-group">
-                                    <label>Nome Completo *</label>
-                                    <input {...inp('nome')} type="text" value={formData.nome} onChange={e => setFormData(p => ({ ...p, nome: e.target.value }))} />
-                                    {errMsg('nome')}
-                                </div>
-                                <div className="input-group">
-                                    <label>Telefone / WhatsApp *</label>
-                                    <input {...inp('telefone')} type="tel" value={formData.telefone} onChange={e => setFormData(p => ({ ...p, telefone: maskPhone(e.target.value) }))} />
-                                    {errMsg('telefone')}
-                                </div>
-                                <div className="input-group">
-                                    <label>Data de Nascimento *</label>
-                                    <input {...inp('dataNascimento')} type="date" style={{ colorScheme: 'dark' }} value={formData.dataNascimento} onChange={e => setFormData(p => ({ ...p, dataNascimento: e.target.value }))} />
-                                    {errMsg('dataNascimento')}
-                                </div>
-                                <div className="input-group">
-                                    <label>Gênero *</label>
-                                    <select {...inp('genero')} style={{ colorScheme: 'dark' }} value={formData.genero} onChange={e => setFormData(p => ({ ...p, genero: e.target.value }))}>
-                                        <option value="">Selecione...</option>
-                                        <option value="Masculino">Masculino</option>
-                                        <option value="Feminino">Feminino</option>
-                                        <option value="Prefiro não dizer">Prefiro não dizer</option>
-                                    </select>
-                                    {errMsg('genero')}
-                                </div>
-                                <div className="input-group">
-                                    <label>Bairro *</label>
-                                    <input {...inp('bairro')} type="text" value={formData.bairro} onChange={e => setFormData(p => ({ ...p, bairro: e.target.value }))} />
-                                    {errMsg('bairro')}
-                                </div>
-                                <div className="input-group">
-                                    <label>Cidade *</label>
-                                    <input {...inp('cidade')} type="text" value={formData.cidade} onChange={e => setFormData(p => ({ ...p, cidade: e.target.value }))} />
-                                </div>
-                                <div className="input-group">
-                                    <label>Logradouro/Nº</label>
-                                    <input className="neon-input" type="text" value={formData.endereco} onChange={e => setFormData(p => ({ ...p, endereco: e.target.value }))} />
-                                </div>
+                            <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
+                                <div className="input-group"><label>Nome Completo *</label><input className="neon-input" value={formData.nome || ''} onChange={e => setFormData({...formData, nome: e.target.value})} /></div>
+                                <div className="input-group"><label>Telefone / WhatsApp *</label><input className="neon-input" value={formData.telefone || ''} onChange={e => setFormData({...formData, telefone: maskPhone(e.target.value)})} /></div>
+                                <div className="input-group"><label>Data de Nascimento *</label><input className="neon-input" type="date" value={formData.dataNascimento || ''} onChange={e => setFormData({...formData, dataNascimento: e.target.value})} /></div>
+                                <div className="input-group"><label>Bairro *</label><input className="neon-input" value={formData.bairro || ''} onChange={e => setFormData({...formData, bairro: e.target.value})} /></div>
                             </div>
                         )}
                     </div>
 
                     {/* RESUMO */}
-                    <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                        {sectionHdr(<BookOpen size={20} />, 'RESUMO PROFISSIONAL', 'resumo')}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={BookOpen} title="Resumo Profissional" id="resumo" />
                         {openSections.resumo && (
-                            <textarea className="neon-input" style={{ minHeight: '100px' }} value={formData.resumo} onChange={e => setFormData(p => ({ ...p, resumo: e.target.value }))} placeholder="Sua trajetória..." />
-                        )}
-                    </div>
-
-                    {/* HABILIDADES */}
-                    <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                        {sectionHdr(<Tag size={20} />, 'HABILIDADES', 'habilidades')}
-                        {openSections.habilidades && (
-                            <>
-                                <input
-                                    className="neon-input"
-                                    placeholder="Pressione Enter para adicionar..."
-                                    value={habilidadeInput}
-                                    onChange={e => setHabilidadeInput(e.target.value)}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' && habilidadeInput.trim()) {
-                                            e.preventDefault();
-                                            if (!formData.habilidades.includes(habilidadeInput.trim())) {
-                                                setFormData(p => ({ ...p, habilidades: [...p.habilidades, habilidadeInput.trim()] }));
-                                            }
-                                            setHabilidadeInput('');
-                                        }
-                                    }}
-                                />
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '1rem' }}>
-                                    {formData.habilidades.map(h => (
-                                        <span key={h} className="glass-panel" style={{
-                                            padding: '4px 12px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            fontSize: '0.85rem',
-                                            background: 'rgba(124, 58, 237, 0.1)',
-                                            borderColor: 'rgba(124, 58, 237, 0.3)',
-                                            borderRadius: '20px',
-                                            color: 'var(--text-main)',
-                                            boxShadow: 'none'
-                                        }}>
-                                            {h}
-                                            <button
-                                                type="button"
-                                                onClick={() => setFormData(p => ({ ...p, habilidades: p.habilidades.filter(x => x !== h) }))}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: '#ff4444',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    padding: 0
-                                                }}
-                                            >
-                                                <X size={14} />
-                                            </button>
-                                        </span>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    {/* CURSOS */}
-                    <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                        {sectionHdr(<GraduationCap size={20} />, 'CURSOS PROFISSIONALIZANTES', 'cursos')}
-                        {openSections.cursos && (
-                            <div>
-                                <button type="button" onClick={() => setFormData(p => ({ ...p, cursos_prof: [...p.cursos_prof, { nome: '', instituicao: '', status: 'completo', observacao: '' }] }))} className="neon-button secondary" style={{ width: 'auto', marginBottom: '1rem' }}><Plus size={16} /> ADICIONAR CURSO</button>
-                                {formData.cursos_prof.map((c, i) => (
-                                    <div key={i} className="form-item">
-                                        <div className="grid-form-cursos">
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Curso</label><input className="neon-input" value={c.nome} onChange={e => { const n = [...formData.cursos_prof]; n[i].nome = e.target.value; setFormData(p => ({ ...p, cursos_prof: n })); }} /></div>
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Instituição</label><input className="neon-input" value={c.instituicao} onChange={e => { const n = [...formData.cursos_prof]; n[i].instituicao = e.target.value; setFormData(p => ({ ...p, cursos_prof: n })); }} /></div>
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Status</label><select className="neon-input" value={c.status} onChange={e => { const n = [...formData.cursos_prof]; n[i].status = e.target.value; setFormData(p => ({ ...p, cursos_prof: n })); }}><option value="completo">Completo</option><option value="cursando">Cursando</option></select></div>
-                                            <button type="button" onClick={() => setFormData(p => ({ ...p, cursos_prof: p.cursos_prof.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', height: '42px' }}><Trash2 size={20} /></button>
-                                        </div>
-                                        <div className="input-group" style={{ marginBottom: 0 }}>
-                                            <label>Observações</label>
-                                            <textarea 
-                                                className="neon-input" 
-                                                placeholder="Ex: Focado em ferramentas de escritório, Excel avançado, etc." 
-                                                value={c.observacao || ''} 
-                                                onChange={e => { 
-                                                    const n = [...formData.cursos_prof]; 
-                                                    n[i].observacao = e.target.value; 
-                                                    setFormData(p => ({ ...p, cursos_prof: n })); 
-                                                }} 
-                                                style={{ minHeight: '60px', paddingTop: '10px' }}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
+                            <div style={{ padding: '1.5rem' }}>
+                                <textarea className="neon-input" style={{ minHeight: '120px' }} value={formData.resumo || ''} onChange={e => setFormData({...formData, resumo: e.target.value})} placeholder="Conte brevemente sobre sua jornada profissional e seus objetivos..." />
                             </div>
                         )}
                     </div>
 
-                    {/* ENSINO MÉDIO */}
-                    <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                        {sectionHdr(<Award size={20} />, 'ENSINO MÉDIO', 'ensinoMedio')}
-                        {openSections.ensinoMedio && (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-                                <div className="input-group">
-                                    <label>Status</label>
-                                    <select className="neon-input" value={formData.ensino_medio.status} onChange={e => setFormData(p => ({ ...p, ensino_medio: { ...p.ensino_medio, status: e.target.value } }))}>
-                                        <option value="">Selecione...</option>
-                                        <option value="completo">Completo</option>
-                                        <option value="cursando">Cursando</option>
-                                        <option value="incompleto">Incompleto</option>
-                                    </select>
+                    {/* HABILIDADES */}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={Tag} title="Principais Habilidades" id="habilidades" />
+                        {openSections.habilidades && (
+                            <div style={{ padding: '1.5rem' }}>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1rem' }}>Selecione suas principais competências:</p>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1.5rem' }}>
+                                    {SKILLS_SUGGESTIONS.map(skill => (
+                                        <button 
+                                            key={skill} 
+                                            type="button"
+                                            onClick={() => formData.habilidades.includes(skill) ? handleRemoveSkill(skill) : handleAddSkill(skill)}
+                                            style={{ 
+                                                padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, border: '1px solid #e2e8f0', cursor: 'pointer',
+                                                background: formData.habilidades.includes(skill) ? 'var(--norte-green)' : '#fff',
+                                                color: formData.habilidades.includes(skill) ? '#fff' : '#475569',
+                                                transition: '0.2s'
+                                            }}
+                                        >
+                                            {formData.habilidades.includes(skill) ? '✓ ' : ''}{skill}
+                                        </button>
+                                    ))}
                                 </div>
-                                {formData.ensino_medio.status === 'cursando' && (
-                                    <>
-                                        <div className="input-group">
-                                            <label>Ano que está cursando</label>
-                                            <select className="neon-input" value={formData.ensino_medio.ano_cursando} onChange={e => setFormData(p => ({ ...p, ensino_medio: { ...p.ensino_medio, ano_cursando: e.target.value } }))}>
-                                                <option value="">Selecione...</option>
-                                                {ANOS_EM.map(a => <option key={a} value={a}>{a}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="input-group">
-                                            <label>Turno</label>
-                                            <select className="neon-input" value={formData.ensino_medio.turno} onChange={e => setFormData(p => ({ ...p, ensino_medio: { ...p.ensino_medio, turno: e.target.value } }))}>
-                                                <option value="">Selecione...</option>
-                                                {TURNOS.map(t => <option key={t} value={t}>{t}</option>)}
-                                            </select>
-                                        </div>
-                                    </>
-                                )}
-                                {formData.ensino_medio.status === 'completo' && (
-                                    <div className="input-group">
-                                        <label>Ano de Conclusão</label>
-                                        <input className="neon-input" type="number" placeholder="Ex: 2024" value={formData.ensino_medio.ano_conclusao} onChange={e => setFormData(p => ({ ...p, ensino_medio: { ...p.ensino_medio, ano_conclusao: e.target.value } }))} />
+                                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
+                                    <label style={{ fontSize: '0.85rem', color: '#64748b', display: 'block', marginBottom: '8px' }}>Adicionar habilidade única:</label>
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <input className="neon-input" value={habilidadeInput} onChange={e => setHabilidadeInput(e.target.value)} placeholder="Ex: Pilotagem de Drone, Corel Draw..." />
+                                        <button type="button" onClick={() => { if(habilidadeInput.trim()) { handleAddSkill(habilidadeInput.trim()); setHabilidadeInput(''); } }} className="neon-button" style={{ width: 'auto', margin: 0 }}>ADICIONAR</button>
                                     </div>
-                                )}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '1rem' }}>
+                                        {formData.habilidades.filter(s => !SKILLS_SUGGESTIONS.includes(s)).map(s => (
+                                            <span key={s} style={{ background: 'var(--norte-dark-green)', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                {s} <X size={14} style={{ cursor: 'pointer' }} onClick={() => handleRemoveSkill(s)} />
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ESCOLARIDADE */}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={GraduationCap} title="Escolaridade" id="escolaridade" />
+                        {openSections.escolaridade && (
+                            <div style={{ padding: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                                    <div className="input-group">
+                                        <label>Status do Ensino Médio</label>
+                                        <select className="neon-input" value={formData.ensino_medio?.status || ''} onChange={e => setFormData({...formData, ensino_medio: {...formData.ensino_medio, status: e.target.value}})}>
+                                            <option value="">Selecione...</option>
+                                            <option value="completo">Concluído</option>
+                                            <option value="cursando">Cursando</option>
+                                            <option value="incompleto">Incompleto</option>
+                                        </select>
+                                    </div>
+
+                                    {formData.ensino_medio?.status === 'cursando' && (
+                                        <div className="input-group">
+                                            <label>Qual ano está cursando?</label>
+                                            <select className="neon-input" value={formData.ensino_medio?.ano_cursando || ''} onChange={e => setFormData({...formData, ensino_medio: {...formData.ensino_medio, ano_cursando: e.target.value}})}>
+                                                <option value="">Selecione...</option>
+                                                <option value="1">1º Ano</option>
+                                                <option value="2">2º Ano</option>
+                                                <option value="3">3º Ano</option>
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {formData.ensino_medio?.status === 'completo' && (
+                                        <div className="input-group">
+                                            <label>Ano de Conclusão</label>
+                                            <input type="number" className="neon-input" placeholder="Ex: 2022" value={formData.ensino_medio?.ano_conclusao || ''} onChange={e => setFormData({...formData, ensino_medio: {...formData.ensino_medio, ano_conclusao: e.target.value}})} />
+                                        </div>
+                                    )}
+
+                                    {formData.ensino_medio?.status === 'incompleto' && (
+                                        <div className="input-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '30px' }}>
+                                            <input type="checkbox" checked={formData.ensino_medio?.fundamental_completo || false} onChange={e => setFormData({...formData, ensino_medio: {...formData.ensino_medio, fundamental_completo: e.target.checked}})} />
+                                            <label style={{ margin: 0 }}>Possuo Ensino Fundamental completo</label>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
 
                     {/* FORMAÇÃO ACADÊMICA */}
-                    <div className="glass-panel" style={{ marginBottom: '2rem' }}>
-                        {sectionHdr(<BookOpen size={20} />, 'FORMAÇÃO ACADÊMICA', 'formacao')}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={Plus} title="Formação Acadêmica (Superior)" id="formacao" />
                         {openSections.formacao && (
-                            <div>
-                                <button type="button" onClick={() => setFormData(p => ({ ...p, formacoes: [...p.formacoes, { instituicao: '', curso: '', status: 'cursando' }] }))} className="neon-button secondary" style={{ width: 'auto', marginBottom: '1rem' }}><Plus size={16} /> ADICIONAR FORMAÇÃO</button>
-                                {formData.formacoes.map((f, i) => (
-                                    <div key={i} className="form-item">
-                                        <div className="grid-form-formacao">
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Instituição</label><input className="neon-input" value={f.instituicao} onChange={e => { const n = [...formData.formacoes]; n[i].instituicao = e.target.value; setFormData(p => ({ ...p, formacoes: n })); }} /></div>
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Curso</label><input className="neon-input" value={f.curso} onChange={e => { const n = [...formData.formacoes]; n[i].curso = e.target.value; setFormData(p => ({ ...p, formacoes: n })); }} /></div>
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Status</label><select className="neon-input" value={f.status} onChange={e => { const n = [...formData.formacoes]; n[i].status = e.target.value; setFormData(p => ({ ...p, formacoes: n })); }}><option value="cursando">Cursando</option><option value="completo">Completo</option></select></div>
-                                            <button type="button" onClick={() => setFormData(p => ({ ...p, formacoes: p.formacoes.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', height: '42px' }}><Trash2 size={20} /></button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* EXPERIÊNCIA */}
-                    <div className="glass-panel" style={{ marginBottom: '4rem' }}>
-                        {sectionHdr(<Briefcase size={20} />, 'EXPERIÊNCIA PROFISSIONAL', 'experiencia')}
-                        {openSections.experiencia && (
-                            <div>
-                                <button type="button" onClick={() => setFormData(p => ({ ...p, experiencias: [...p.experiencias, { empresa: '', cargo: '', atual: false, descricao: '', mes_inicio: '', ano_inicio: '', mes_fim: '', ano_fim: '' }] }))} className="neon-button secondary" style={{ width: 'auto', marginBottom: '1rem' }}><Plus size={16} /> ADICIONAR EXPERIÊNCIA</button>
-                                {formData.experiencias.map((exp, i) => (
-                                    <div key={i} className="form-item" style={{ position: 'relative' }}>
-                                        <div className="grid-form-experiencia">
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Empresa</label><input className="neon-input" value={exp.empresa} onChange={e => { const n = [...formData.experiencias]; n[i].empresa = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }} /></div>
-                                            <div className="input-group" style={{ marginBottom: 0 }}><label>Cargo</label><input className="neon-input" value={exp.cargo} onChange={e => { const n = [...formData.experiencias]; n[i].cargo = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }} /></div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '42px' }}><input type="checkbox" id={`at-${i}`} checked={exp.atual} onChange={e => { const n = [...formData.experiencias]; n[i].atual = e.target.checked; setFormData(p => ({ ...p, experiencias: n })); }} /><label htmlFor={`at-${i}`} style={{ marginBottom: 0, textTransform: 'none', fontWeight: 600 }}>Atual</label></div>
-                                            <button type="button" onClick={() => setFormData(p => ({ ...p, experiencias: p.experiencias.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', height: '42px' }}><Trash2 size={20} /></button>
-                                        </div>
-
-                                        <div style={{ display: 'flex', gap: '1.5rem', margin: '1rem 0', flexWrap: 'wrap' }}>
-                                            <div style={{ flex: 1, minWidth: '200px' }}>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', marginBottom: '8px' }}>INÍCIO</label>
-                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    <select className="neon-input" style={{ flex: 1 }} value={exp.mes_inicio} onChange={e => { const n = [...formData.experiencias]; n[i].mes_inicio = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
-                                                        <option value="">Mês</option>
-                                                        {MESES.map(m => <option key={m} value={m}>{m}</option>)}
-                                                    </select>
-                                                    <select className="neon-input" style={{ flex: 1 }} value={exp.ano_inicio} onChange={e => { const n = [...formData.experiencias]; n[i].ano_inicio = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
-                                                        <option value="">Ano</option>
-                                                        {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
+                            <div style={{ padding: '1.5rem' }}>
+                                <button type="button" onClick={() => setFormData({...formData, formacoes: [...(formData.formacoes || []), { curso: '', instituicao: '', status: '', ano_conclusao: '' }]})} className="neon-button secondary" style={{ width: '100%', background: '#f8fafc', color: '#475569', marginBottom: '1.5rem' }}>
+                                    + ADICIONAR FORMAÇÃO SUPERIOR
+                                </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                    {(formData.formacoes || []).map((f, i) => (
+                                        <div key={i} style={{ border: '1px solid #f1f5f9', padding: '1.2rem', borderRadius: '12px', position: 'relative' }}>
+                                            <button type="button" onClick={() => setFormData({...formData, formacoes: formData.formacoes.filter((_, idx) => idx !== i)})} style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                                <Trash2 size={18} color="#ef4444" />
+                                            </button>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                                                <div className="input-group"><label>Curso</label><input className="neon-input" placeholder="Ex: Administração, Direito..." value={f.curso || ''} onChange={e => { const nf = [...formData.formacoes]; nf[i].curso = e.target.value; setFormData({...formData, formacoes: nf}); }} /></div>
+                                                <div className="input-group"><label>Onde faz / fez (Instituição)</label><input className="neon-input" placeholder="Ex: UFPA, Unama..." value={f.instituicao || ''} onChange={e => { const nf = [...formData.formacoes]; nf[i].instituicao = e.target.value; setFormData({...formData, formacoes: nf}); }} /></div>
+                                                <div className="input-group">
+                                                    <label>Status</label>
+                                                    <select className="neon-input" value={f.status || ''} onChange={e => { const nf = [...formData.formacoes]; nf[i].status = e.target.value; setFormData({...formData, formacoes: nf}); }}>
+                                                        <option value="">Selecione...</option>
+                                                        <option value="completo">Completo</option>
+                                                        <option value="cursando">Cursando</option>
+                                                        <option value="incompleto">Incompleto</option>
                                                     </select>
                                                 </div>
+                                                {f.status === 'completo' && (
+                                                    <div className="input-group"><label>Ano de Conclusão</label><input type="number" className="neon-input" value={f.ano_conclusao || ''} onChange={e => { const nf = [...formData.formacoes]; nf[i].ano_conclusao = e.target.value; setFormData({...formData, formacoes: nf}); }} /></div>
+                                                )}
                                             </div>
-
-                                            {!exp.atual && (
-                                                <div style={{ flex: 1, minWidth: '200px' }}>
-                                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', marginBottom: '8px' }}>FIM</label>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                        <select className="neon-input" style={{ flex: 1 }} value={exp.mes_fim} onChange={e => { const n = [...formData.experiencias]; n[i].mes_fim = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
-                                                            <option value="">Mês</option>
-                                                            {MESES.map(m => <option key={m} value={m}>{m}</option>)}
-                                                        </select>
-                                                        <select className="neon-input" style={{ flex: 1 }} value={exp.ano_fim} onChange={e => { const n = [...formData.experiencias]; n[i].ano_fim = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }}>
-                                                            <option value="">Ano</option>
-                                                            {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
-
-                                        <textarea className="neon-input" placeholder="Descreva suas atividades..." value={exp.descricao} onChange={e => { const n = [...formData.experiencias]; n[i].descricao = e.target.value; setFormData(p => ({ ...p, experiencias: n })); }} style={{ minHeight: '80px' }} />
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
 
-                    {/* TESTE DISC */}
-                    <div className="glass-panel" style={{ marginBottom: '4rem' }}>
-                        {sectionHdr(<Brain size={20} />, 'PERFIL COMPORTAMENTAL (DISC)', 'disc')}
-                        {openSections.disc && (
-                            <div style={{ padding: '10px 0' }}>
-                                {!formData.perfil_disc || !formData.perfil_disc.startsWith('{') ? (
-                                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                                        <div style={{ display: 'inline-flex', padding: '15px', background: 'rgba(0,141,76,0.1)', borderRadius: '50%', marginBottom: '1.5rem', color: 'var(--norte-green)' }}>
-                                            <Brain size={40} />
+                    {/* CURSOS */}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={Award} title="Cursos Profissionalizantes" id="cursos" />
+                        {openSections.cursos && (
+                            <div style={{ padding: '1.5rem' }}>
+                                <button type="button" onClick={() => setFormData({...formData, cursos_prof: [...(formData.cursos_prof || []), { nome: '', instituicao: '', status: '' }]})} className="neon-button secondary" style={{ width: '100%', background: '#f8fafc', color: '#475569', marginBottom: '1.5rem' }}>
+                                    + ADICIONAR CURSO
+                                </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {(formData.cursos_prof || []).map((c, i) => (
+                                    <div key={i} style={{ border: '1px solid #f1f5f9', padding: '1.2rem', borderRadius: '12px', display: 'flex', gap: '1.2rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                        <div className="input-group" style={{ flex: 2, minWidth: '200px' }}><label>O que fez (Nome do Curso)</label><input className="neon-input" value={c.nome || ''} onChange={e => { const nc = [...formData.cursos_prof]; nc[i].nome = e.target.value; setFormData({...formData, cursos_prof: nc}); }} /></div>
+                                        <div className="input-group" style={{ flex: 1.5, minWidth: '180px' }}><label>Onde fez (Instituição)</label><input className="neon-input" value={c.instituicao || ''} onChange={e => { const nc = [...formData.cursos_prof]; nc[i].instituicao = e.target.value; setFormData({...formData, cursos_prof: nc}); }} /></div>
+                                        <div className="input-group" style={{ flex: 1, minWidth: '150px' }}>
+                                            <label>Status</label>
+                                            <select className="neon-input" value={c.status || ''} onChange={e => { const nc = [...formData.cursos_prof]; nc[i].status = e.target.value; setFormData({...formData, cursos_prof: nc}); }}>
+                                                <option value="">Selecione...</option>
+                                                <option value="completo">Completo</option>
+                                                <option value="cursando">Cursando</option>
+                                            </select>
                                         </div>
-                                        <h4 style={{ fontSize: '1.3rem', fontWeight: 900, marginBottom: '1rem' }}>DESCUBRA SEU PERFIL</h4>
-                                        <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', maxWidth: '400px', marginInline: 'auto' }}>
-                                            Responda ao nosso questionário rápido para descobrir suas principais tendências comportamentais e atrair as empresas certas.
-                                        </p>
-                                        <button type="button" onClick={() => setShowDiscQuiz(true)} className="neon-button" style={{ width: 'auto', padding: '12px 30px' }}>
-                                            INICIAR TESTE COMPORTAMENTAL
+                                        <button type="button" onClick={() => setFormData({...formData, cursos_prof: formData.cursos_prof.filter((_, idx) => idx !== i)})} style={{ background: '#fef2f2', border: '1px solid #fee2e2', padding: '12px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '42px', width: '42px', transition: '0.2s' }}>
+                                            <Trash2 size={20} color="#ef4444" />
                                         </button>
                                     </div>
-                                ) : (() => {
-                                    const res = JSON.parse(formData.perfil_disc);
-                                    const sorted = Object.entries(res).sort((a,b) => b[1] - a[1]);
-                                    const dominant = sorted[0][0];
-
-                                    return (
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', alignItems: 'center' }}>
-                                            <div style={{ textAlign: 'center', padding: '2rem', background: 'rgba(0,141,76,0.05)', borderRadius: '15px', border: '1px solid rgba(0,141,76,0.1)' }}>
-                                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px', fontWeight: 700 }}>Perfil Dominante</p>
-                                                <h4 style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--norte-dark-green)', margin: 0 }}>{dominant.toUpperCase()}</h4>
-                                                <button type="button" onClick={() => setShowDiscQuiz(true)} style={{ marginTop: '1.5rem', background: 'none', border: 'none', color: 'var(--norte-green)', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px', marginInline: 'auto' }}>
-                                                    <RefreshCw size={14} /> REFAZER TESTE
-                                                </button>
-                                            </div>
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                                {sorted.map(([type, value]) => (
-                                                    <div key={type}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.9rem', fontWeight: 800 }}>
-                                                            <span>{type}</span>
-                                                            <span style={{ color: value > 40 ? 'var(--norte-green)' : 'var(--text-muted)' }}>{value}%</span>
-                                                        </div>
-                                                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                                                            <div style={{ 
-                                                                width: `${value}%`, 
-                                                                height: '100%', 
-                                                                background: type === dominant ? 'var(--norte-green)' : 'rgba(0,141,76,0.1)',
-                                                                boxShadow: type === dominant ? '0 0 10px rgba(0,141,76,0.3)' : 'none',
-                                                                transition: 'width 1s ease-out' 
-                                                            }} />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
+                                ))}
+                                </div>
                             </div>
                         )}
                     </div>
 
+                    {/* EXPERIÊNCIAS PROFISSIONAIS */}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={Briefcase} title="Experiências Profissionais" id="experiencias" />
+                        {openSections.experiencias && (
+                            <div style={{ padding: '1.5rem' }}>
+                                <button type="button" onClick={() => setFormData({...formData, experiencias: [...(formData.experiencias || []), { empresa: '', cargo: '', mes_inicio: '', ano_inicio: '', mes_fim: '', ano_fim: '', atual: false, atribuicoes: '' }]})} className="neon-button secondary" style={{ width: '100%', background: '#f8fafc', color: '#475569', marginBottom: '1.5rem' }}>
+                                    + ADICIONAR EXPERIÊNCIA
+                                </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                    {(formData.experiencias || []).map((exp, i) => (
+                                        <div key={i} style={{ border: '1px solid #f1f5f9', padding: '1.2rem', borderRadius: '12px', position: 'relative' }}>
+                                            <button type="button" onClick={() => setFormData({...formData, experiencias: formData.experiencias.filter((_, idx) => idx !== i)})} style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                                                <Trash2 size={18} color="#ef4444" />
+                                            </button>
+                                            
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.2rem' }}>
+                                                <div className="input-group"><label>Empresa</label><input className="neon-input" value={exp.empresa || ''} onChange={e => { const ne = [...formData.experiencias]; ne[i].empresa = e.target.value; setFormData({...formData, experiencias: ne}); }} /></div>
+                                                <div className="input-group"><label>Cargo</label><input className="neon-input" value={exp.cargo || ''} onChange={e => { const ne = [...formData.experiencias]; ne[i].cargo = e.target.value; setFormData({...formData, experiencias: ne}); }} /></div>
+                                                
+                                                <div className="input-group" style={{ gridColumn: 'span 1' }}>
+                                                    <label>Início</label>
+                                                    <div style={{ display: 'flex', gap: '5px' }}>
+                                                        <select className="neon-input" style={{ flex: 1 }} value={exp.mes_inicio || ''} onChange={e => { const ne = [...formData.experiencias]; ne[i].mes_inicio = e.target.value; setFormData({...formData, experiencias: ne}); }}>
+                                                            <option value="">Mês</option>
+                                                            {MESES.map((m, idx) => <option key={m} value={idx + 1}>{m}</option>)}
+                                                        </select>
+                                                        <input type="number" className="neon-input" style={{ flex: 1 }} placeholder="Ano" value={exp.ano_inicio || ''} onChange={e => { const ne = [...formData.experiencias]; ne[i].ano_inicio = e.target.value; setFormData({...formData, experiencias: ne}); }} />
+                                                    </div>
+                                                </div>
 
-                    <div className="fab-container">
-                        <button type="submit" className="neon-button" style={{ display: 'flex', gap: '10px', background: '#000', color: '#fff', boxShadow: '0 4px 15px rgba(0,0,0,0.5)', width: 'auto', padding: '15px 30px', borderRadius: '30px' }} disabled={saving}>
-                            <Save size={20} /> {saving ? 'GRAVANDO...' : 'SALVAR CURRÍCULO'}
-                        </button>
+                                                <div className="input-group" style={{ gridColumn: 'span 1' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                        <label style={{ margin: 0 }}>Fim</label>
+                                                        <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                                            <input type="checkbox" checked={exp.atual || false} onChange={e => { const ne = [...formData.experiencias]; ne[i].atual = e.target.checked; setFormData({...formData, experiencias: ne}); }} /> Atual
+                                                        </label>
+                                                    </div>
+                                                    {!exp.atual && (
+                                                        <div style={{ display: 'flex', gap: '5px' }}>
+                                                            <select className="neon-input" style={{ flex: 1 }} value={exp.mes_fim || ''} onChange={e => { const ne = [...formData.experiencias]; ne[i].mes_fim = e.target.value; setFormData({...formData, experiencias: ne}); }}>
+                                                                <option value="">Mês</option>
+                                                                {MESES.map((m, idx) => <option key={m} value={idx + 1}>{m}</option>)}
+                                                            </select>
+                                                            <input type="number" className="neon-input" style={{ flex: 1 }} placeholder="Ano" value={exp.ano_fim || ''} onChange={e => { const ne = [...formData.experiencias]; ne[i].ano_fim = e.target.value; setFormData({...formData, experiencias: ne}); }} />
+                                                        </div>
+                                                    )}
+                                                    {exp.atual && <div className="neon-input" style={{ background: '#f8fafc', color: 'var(--norte-green)', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>TRABALHANDO ATUALMENTE</div>}
+                                                </div>
+
+                                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                                    <label>Atribuições (O que você fazia?)</label>
+                                                    <textarea className="neon-input" style={{ minHeight: '80px' }} placeholder="Ex: Atendimento ao cliente, reposição de estoque, fechamento de caixa..." value={exp.atribuicoes || ''} onChange={e => { const ne = [...formData.experiencias]; ne[i].atribuicoes = e.target.value; setFormData({...formData, experiencias: ne}); }} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {(formData.experiencias?.length === 0) && (
+                                    <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', marginTop: '1rem' }}>Caso seja seu primeiro emprego, pode deixar em branco.</p>
+                                )}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Espaçador para o FAB não cobrir conteúdo no mobile */}
-                    <div className="mobile-only-spacer" style={{ height: '120px', display: 'none' }}></div>
-                </form>
+                    {/* CNH E TRANSPORTE */}
+                    <div className="glass-panel" style={{ padding: 0 }}>
+                        <SectionHeader icon={Award} title="CNH e Transporte" id="cnh" />
+                        {openSections.cnh && (
+                            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
+                                    <div className="input-group">
+                                        <label>Possui CNH?</label>
+                                        <select className="neon-input" value={formData.cnh?.possui ? 'true' : 'false'} onChange={e => setFormData({...formData, cnh: {...formData.cnh, possui: e.target.value === 'true'}})}>
+                                            <option value="false">Não possuo</option>
+                                            <option value="true">Sim, possuo</option>
+                                        </select>
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Possui Veículo Próprio?</label>
+                                        <select className="neon-input" value={formData.possui_transporte ? 'true' : 'false'} onChange={e => setFormData({...formData, possui_transporte: e.target.value === 'true'})}>
+                                            <option value="false">Não possuo</option>
+                                            <option value="true">Sim, possuo</option>
+                                        </select>
+                                    </div>
+                                </div>
 
-                <div style={{ marginTop: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.85rem' }}>
-                    <p>© 2026 Norte Empregos - Todos os direitos reservados</p>
+                                {formData.cnh?.possui && (
+                                    <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--norte-dark-green)', display: 'block', marginBottom: '10px' }}>CATEGORIAS DA CNH:</label>
+                                        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                                            {['A', 'B', 'C', 'D', 'E'].map(cat => (
+                                                <label key={cat} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 700 }}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={formData.cnh?.categorias?.includes(cat)} 
+                                                        onChange={e => {
+                                                            const cats = formData.cnh?.categorias || [];
+                                                            if (e.target.checked) setFormData({...formData, cnh: {...formData.cnh, categorias: [...cats, cat]}});
+                                                            else setFormData({...formData, cnh: {...formData.cnh, categorias: cats.filter(c => c !== cat)}});
+                                                        }}
+                                                    /> {cat}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{ marginTop: '3rem', textAlign: 'center' }}>
+                    <button 
+                        onClick={handleSaveManual} 
+                        className="neon-button" 
+                        style={{ background: autoSaving ? '#10b981' : 'var(--norte-dark-green)', color: '#fff', width: 'auto', padding: '16px 60px', fontSize: '1.1rem', fontWeight: 900, boxShadow: '0 8px 20px rgba(0, 91, 50, 0.3)', transition: 'all 0.3s ease' }}
+                    >
+                        {autoSaving ? <CheckCircle size={20} style={{ marginRight: '10px', display: 'inline' }} /> : <Save size={20} style={{ marginRight: '10px', display: 'inline' }} />}
+                        {autoSaving ? 'SALVANDO CURRÍCULO...' : 'SALVAR CURRÍCULO 💾'}
+                    </button>
+                    <p style={{ marginTop: '1rem', color: '#64748b', fontSize: '0.85rem' }}>Seus dados também são salvos automaticamente enquanto você digita. ✨</p>
                 </div>
             </div>
 
-            <style>{`
-                .form-item { background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.05); }
-                .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; borderRadius: 8px; zIndex: 9999; fontWeight: bold; animation: fadeIn 0.3s ease; }
-                .toast.success { background: #22c55e; color: #fff; }
-                .toast.error { background: #ef4444; color: #fff; }
-                .avatar-preview { width: 100px; height: 100px; border-radius: 50%; overflow: hidden; border: 3px solid var(--norte-green); background: #f0fdf4; display: flex; alignItems: center; justifyContent: center; flex-shrink: 0; }
-                .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
-                .alert-box { background: rgba(0,141,76,0.05); border: 1px solid var(--norte-green); padding: 1rem; border-radius: 12px; margin-bottom: 2rem; display: flex; gap: 1rem; }
-                @media (max-width: 768px) {
-                    .mobile-only-spacer { display: block !important; }
-                }
-            `}</style>
+            <DiscQuizModal isOpen={showDiscQuiz} onClose={() => setShowDiscQuiz(false)} onFinish={(res) => setFormData({...formData, perfil_disc: JSON.stringify(res)})} />
+            <NorteToast message={toast.message} type={toast.type} onClose={() => setToast({message:'', type:'info'})} />
         </div>
     );
 }

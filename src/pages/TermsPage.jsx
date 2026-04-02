@@ -86,6 +86,12 @@ export default function TermsPage() {
                         <h3 style={{ color: 'var(--neon-blue)', marginBottom: '0.5rem' }}>9. Resolução de Disputas</h3>
                         <p>Eventuais conflitos decorrentes destes Termos serão resolvidos prioritariamente por acordo direto entre as partes. Na impossibilidade de acordo, fica eleito o foro da Comarca de [Cidade/UF], com renúncia a qualquer outro, por mais privilegiado que seja.</p>
                     </section>
+                    
+                    <section style={{ marginBottom: '1.5rem' }}>
+                        <h3 style={{ color: 'var(--neon-blue)', marginBottom: '0.5rem' }}>10. Casos de Sucesso e Divulgação</h3>
+                        <p>Ao utilizar a plataforma e obter uma contratação através das vagas aqui publicadas, o usuário (Candidato) autoriza expressamente a Norte Empregos a utilizar seu nome e imagem (conforme fornecidos no cadastro) para fins de divulgação de "Cases de Sucesso". Esta divulgação poderá ocorrer em nossas redes sociais, site oficial e materiais de marketing, com o objetivo de celebrar a conquista do usuário e demonstrar a eficácia da plataforma.</p>
+                    </section>
+
 
                 </div>
 

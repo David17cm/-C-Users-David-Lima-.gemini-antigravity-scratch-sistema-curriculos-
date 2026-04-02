@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Compass, UserPlus, LogIn, ChevronRight, GraduationCap, Building, ShieldCheck } from 'lucide-react';
+import BrandLogo from '../components/layout/BrandLogo';
 
 export default function LandingPage() {
     const navigate = useNavigate();
@@ -19,7 +20,7 @@ export default function LandingPage() {
             {/* Header / Logo */}
             <nav style={{ padding: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.5rem', fontWeight: '900', color: 'var(--norte-dark-green)', letterSpacing: '1px' }}>
-                    <Compass size={32} color="var(--norte-green)" /> NORTE EMPREGOS
+                    <BrandLogo size={32} /> NORTE EMPREGOS
                 </div>
             </nav>
 
@@ -76,7 +77,7 @@ export default function LandingPage() {
                     {/* Coluna: Identidade */}
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--norte-green)', fontWeight: '900', fontSize: '1rem', marginBottom: '0.75rem' }}>
-                            <Compass size={20} /> Norte Empregos
+                            <BrandLogo size={20} /> Norte Empregos
                         </div>
                         <p style={{ margin: 0, lineHeight: 1.7 }}>
                             CNPJ: 00.000.000/0001-00<br />

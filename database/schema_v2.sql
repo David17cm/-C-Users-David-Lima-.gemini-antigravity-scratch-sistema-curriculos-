@@ -11,7 +11,7 @@ CREATE TABLE public.user_roles (
 -- Habilitar RLS em user_roles
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 
--- Políticas de user_roles
+-- Políticas de user_rolesoi
 -- Usuários podem ler sua própria role
 CREATE POLICY "Users can read their own role" ON public.user_roles
     FOR SELECT USING (auth.uid() = user_id);
@@ -86,6 +86,8 @@ CREATE POLICY "Empresa edita propria vaga" ON public.vagas
 -- 4. Ajustes nas Políticas da tabela de Currículos
 -- A tabela 'curriculos' já existe. Vamos apenas adicionar políticas para que Empresas possam ler todos e Admins também.
 
+-- A tabela 'curriculos' já existe. Vamos apenas adicionar políticas para que Empresas possam ler todos e Admins também.
+
 -- Permitir leitura de TODOS os currículos se o usuário logado tiver a role 'empresa' ou 'admin'
 CREATE POLICY "Empresas e Admins podem ler todos os curriculos" ON public.curriculos
     FOR SELECT USING (
@@ -94,3 +96,8 @@ CREATE POLICY "Empresas e Admins podem ler todos os curriculos" ON public.curric
 
 -- Nota: A política "Users can view their own curriculo" já garante que o candidato veja o dele.
 -- As políticas de INSERT e UPDATE já estão prontas no seu schema.sql oriinal e continuam válidas.
+
+-- 5. Atualização para Fase 2 (CNH e Transporte)
+-- ALTER TABLE public.curriculos ADD COLUMN IF NOT EXISTS possui_transporte BOOLEAN DEFAULT false;
+-- ALTER TABLE public.curriculos ALTER COLUMN cnh SET DEFAULT '{}'::jsonb;
+
