@@ -120,10 +120,13 @@ export default function LandingPage() {
             </footer>
 
             <style>{`
+                .card-hover {
+                    transition: all 0.3s ease;
+                }
                 .card-hover:hover {
-                    transform: translateY(-5px);
-                    background: rgba(255,255,255,0.05) !important;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                    transform: translateY(-8px);
+                    box-shadow: 0 15px 40px rgba(0, 48, 25, 0.15) !important;
+                    filter: brightness(1.08);
                 }
             `}</style>
         </div>
