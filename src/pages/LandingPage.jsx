@@ -19,41 +19,48 @@ export default function LandingPage() {
 
             {/* Header / Logo */}
             <nav style={{ padding: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.5rem', fontWeight: '900', color: 'var(--norte-dark-green)', letterSpacing: '1px' }}>
-                    <BrandLogo size={32} /> NORTE EMPREGOS
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.8rem', fontWeight: '900', color: 'var(--norte-dark-green)', letterSpacing: '-0.5px' }}>
+                    <div style={{ background: 'var(--norte-green)', width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 5px 15px rgba(0,141,76,0.3)' }}>
+                        <BrandLogo size={24} color="#fff" />
+                    </div>
+                    <span>NORTE <span style={{ color: 'var(--norte-green)' }}>EMPREGOS</span></span>
                 </div>
             </nav>
 
             {/* Hero Section */}
             <main style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
                 <div style={{ maxWidth: '900px', width: '100%', textAlign: 'center' }}>
-                    <div className="glass-panel" style={{ padding: '4rem 2rem', border: '1px solid rgba(0,240,255,0.15)', boxShadow: '0 0 40px rgba(0,0,0,0.3)' }}>
-                        <h1 style={{ fontSize: 'clamp(2.5rem, 6vw, 4rem)', color: 'var(--norte-dark-green)', marginBottom: '1.5rem', lineHeight: 1.1, fontWeight: 900 }}>
-                            <span style={{ color: 'var(--norte-green)' }}>Norte</span> <br />
-                            Empregos
+                    <div className="glass-panel" style={{ padding: '4rem 2rem', border: '1.5px solid var(--norte-green)', boxShadow: '0 20px 60px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(20px)' }}>
+                        <h1 style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', color: 'var(--norte-dark-green)', marginBottom: '1.5rem', lineHeight: 1.0, fontWeight: 900 }}>
+                            Conectando <br />
+                            <span style={{ color: 'var(--norte-green)' }}>Grandes Talentos</span>
                         </h1>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto 3rem', lineHeight: 1.6 }}>
-                            A plataforma definitiva para candidatos que buscam destaque e empresas que procuram excelência profissional.
+                        <p style={{ color: '#4a5568', fontSize: '1.25rem', maxWidth: '600px', margin: '0 auto 3.5rem', lineHeight: 1.6, fontWeight: 500 }}>
+                            A plataforma definitiva da Amazônia para quem busca destaque e empresas que procuram o <span style={{ color: 'var(--norte-green)', fontWeight: 700 }}>match perfeito</span>.
                         </p>
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', marginTop: '2rem' }}>
                             {/* Card Login */}
-                            <div className="card-hover" onClick={() => handleAction('login')} style={{ cursor: 'pointer', padding: '2.5rem', borderRadius: '20px', background: '#fff', border: '1px solid #e2e8f0', transition: 'all 0.3s ease' }}>
-                                <LogIn size={40} color="var(--norte-green)" style={{ marginBottom: '1.5rem' }} />
-                                <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--norte-dark-green)' }}>JÁ TENHO LOGIN</h3>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.5rem' }}>Acesse seu painel, gerencie seu currículo ou vagas.</p>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--norte-green)', fontWeight: '800' }}>
+                            <div className="card-hover" onClick={() => handleAction('login')} style={{ cursor: 'pointer', padding: '2.5rem', borderRadius: '24px', background: '#fff', border: '1.5px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+                                <div style={{ background: 'rgba(0,141,76,0.1)', width: '60px', height: '60px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                                    <LogIn size={30} color="var(--norte-green)" />
+                                </div>
+                                <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--norte-dark-green)', fontWeight: 800 }}>JÁ TENHO LOGIN</h3>
+                                <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '1.5rem' }}>Acesse seu painel, gerencie seu currículo ou suas vagas abertas.</p>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--norte-green)', fontWeight: '800', fontSize: '1rem' }}>
                                     ENTRAR AGORA <ChevronRight size={18} />
                                 </div>
                             </div>
 
                             {/* Card Registro */}
-                            <div className="card-hover" onClick={() => handleAction('signup')} style={{ cursor: 'pointer', padding: '2.5rem', borderRadius: '20px', background: '#fff', border: '2px solid var(--norte-yellow)', transition: 'all 0.3s ease' }}>
-                                <UserPlus size={40} color="var(--norte-yellow)" style={{ marginBottom: '1.5rem' }} />
-                                <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--norte-dark-green)' }}>PRIMEIRO ACESSO</h3>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.5rem' }}>Crie seu perfil profissional e tenha acesso vitalício ao ecossistema de vagas.</p>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--norte-dark-green)', fontWeight: '800' }}>
-                                    CRIAR MINHA CONTA <ChevronRight size={18} />
+                            <div className="card-hover" onClick={() => handleAction('signup')} style={{ cursor: 'pointer', padding: '2.5rem', borderRadius: '24px', background: 'var(--norte-dark-green)', border: 'none', boxShadow: '0 10px 30px rgba(0, 48, 25, 0.2)', textAlign: 'center', color: '#fff' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.1)', width: '60px', height: '60px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                                    <UserPlus size={30} color="var(--norte-green)" />
+                                </div>
+                                <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#fff', fontWeight: 800 }}>CRIAR CONTA</h3>
+                                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.95rem', marginBottom: '1.5rem' }}>Cadastre seu currículo ou sua empresa para começar agora.</p>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--norte-green)', fontWeight: '800', fontSize: '1rem' }}>
+                                    COMEÇAR GRÁTIS <ChevronRight size={18} />
                                 </div>
                             </div>
                         </div>
@@ -61,53 +68,54 @@ export default function LandingPage() {
 
                     {/* Features Simples */}
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', marginTop: '4rem', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--norte-teal)', fontWeight: '600', fontSize: '0.95rem' }}>
-                            <GraduationCap size={20} /> +100 Cursos Categorizados
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--norte-dark-green)', fontWeight: '700', fontSize: '1rem' }}>
+                            <div style={{ background: 'var(--norte-green)', width: '8px', height: '8px', borderRadius: '50%' }}></div>
+                            Matching Inteligente
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--norte-teal)', fontWeight: '600', fontSize: '0.95rem' }}>
-                            <Building size={20} /> Empresas Verificadas
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--norte-dark-green)', fontWeight: '700', fontSize: '1rem' }}>
+                            <div style={{ background: 'var(--norte-green)', width: '8px', height: '8px', borderRadius: '50%' }}></div>
+                            Currículo A4 Profissional
                         </div>
                     </div>
                 </div>
             </main>
 
             {/* Footer */}
-            <footer style={{ padding: '2.5rem 2rem', borderTop: '1px solid rgba(255,255,255,0.07)', color: 'rgba(154,140,173,0.5)', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)' }}>
-                <div style={{ maxWidth: '900px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '2rem', textAlign: 'left' }}>
+            <footer style={{ padding: '3rem 2rem', borderTop: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.9rem', background: '#fff' }}>
+                <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '3rem', textAlign: 'left' }}>
                     {/* Coluna: Identidade */}
                     <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--norte-green)', fontWeight: '900', fontSize: '1rem', marginBottom: '0.75rem' }}>
-                            <BrandLogo size={20} /> Norte Empregos
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--norte-dark-green)', fontWeight: '900', fontSize: '1.2rem', marginBottom: '1rem' }}>
+                            <BrandLogo size={24} /> Norte Empregos
                         </div>
-                        <p style={{ margin: 0, lineHeight: 1.7 }}>
-                            CNPJ: 00.000.000/0001-00<br />
-                            Endereço: Rua Exemplo, 123, Centro<br />
-                            Cidade - UF, CEP 00000-000
+                        <p style={{ margin: 0, lineHeight: 1.7, color: '#94a3b8' }}>
+                            A maior plataforma de recrutamento e <br />
+                            seleção estratégica da região Norte.
                         </p>
                     </div>
 
                     {/* Coluna: Legal */}
                     <div>
-                        <p style={{ fontWeight: 'bold', color: 'rgba(154,140,173,0.8)', marginBottom: '0.75rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Legal</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                            <a href="/legal?doc=termos" style={{ color: 'rgba(154,140,173,0.6)', textDecoration: 'none' }}>Termos de Uso</a>
-                            <a href="/legal?doc=privacidade" style={{ color: 'rgba(154,140,173,0.6)', textDecoration: 'none' }}>Política de Privacidade</a>
+                        <p style={{ fontWeight: '800', color: 'var(--norte-dark-green)', marginBottom: '1rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Legal</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            <a href="/legal?doc=termos" style={{ color: '#64748b', textDecoration: 'none' }}>Termos de Uso</a>
+                            <a href="/legal?doc=privacidade" style={{ color: '#64748b', textDecoration: 'none' }}>Privacidade</a>
                         </div>
                     </div>
 
                     {/* Coluna: Contato */}
                     <div>
-                        <p style={{ fontWeight: 'bold', color: 'rgba(154,140,173,0.8)', marginBottom: '0.75rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Contato</p>
+                        <p style={{ fontWeight: '800', color: 'var(--norte-dark-green)', marginBottom: '1rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Suporte</p>
                         <p style={{ margin: 0, lineHeight: 1.7 }}>
-                            suporte@norteempregos.com.br<br />
-                            Responsável pelos dados (DPO):<br />
-                            dpo@norteempregos.com.br
+                            atendimento@norteempregos.com.br<br />
+                            Santarém - Pará - Amazônia
                         </p>
                     </div>
                 </div>
 
-                <div style={{ maxWidth: '900px', margin: '2rem auto 0', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', textAlign: 'center' }}>
-                    &copy; 2026 Norte Empregos. Todos os direitos reservados.
+                <div style={{ maxWidth: '1000px', margin: '3rem auto 0', paddingTop: '1.5rem', borderTop: '1px solid #f1f5f9', textAlign: 'center', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <span style={{ fontWeight: 600 }}>&copy; 2026 Norte Empregos. Todos os direitos reservados.</span>
+                    <span style={{ background: 'var(--norte-green)', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800 }}>VERSÃO 2.5 ATUALIZADA ✅</span>
                 </div>
             </footer>
 
