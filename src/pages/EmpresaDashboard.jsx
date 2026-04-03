@@ -562,35 +562,38 @@ export default function EmpresaDashboard() {
             }
 
             // --- APLICAÇÃO DE FILTROS SERVER-SIDE ---
-            if (filtros.nome) query = query.ilike('nome', `%${filtros.nome}%`);
-            if (filtros.cidade) query = query.ilike('cidade', `%${filtros.cidade}%`);
-            if (filtros.genero) query = query.eq('genero', filtros.genero);
-            
-            // Filtro de Idade
-            if (filtros.idadeMin) {
-                const date = new Date();
-                date.setFullYear(date.getFullYear() - parseInt(filtros.idadeMin));
-                query = query.lte('data_nascimento', date.toISOString().split('T')[0]);
-            }
-            if (filtros.idadeMax) {
-                const date = new Date();
-                date.setFullYear(date.getFullYear() - (parseInt(filtros.idadeMax) + 1));
-                query = query.gte('data_nascimento', date.toISOString().split('T')[0]);
-            }
+            // Só aplicamos filtros de busca se NÃO estivermos na aba de salvos
+            if (activeTab !== 'salvos') {
+                if (filtros.nome) query = query.ilike('nome', `%${filtros.nome}%`);
+                if (filtros.cidade) query = query.ilike('cidade', `%${filtros.cidade}%`);
+                if (filtros.genero) query = query.eq('genero', filtros.genero);
+                
+                // Filtro de Idade
+                if (filtros.idadeMin) {
+                    const date = new Date();
+                    date.setFullYear(date.getFullYear() - parseInt(filtros.idadeMin));
+                    query = query.lte('data_nascimento', date.toISOString().split('T')[0]);
+                }
+                if (filtros.idadeMax) {
+                    const date = new Date();
+                    date.setFullYear(date.getFullYear() - (parseInt(filtros.idadeMax) + 1));
+                    query = query.gte('data_nascimento', date.toISOString().split('T')[0]);
+                }
 
-            // Transporte
-            if (filtros.possuiTransporte === 'true') query = query.eq('possui_transporte', true);
-            if (filtros.possuiTransporte === 'false') query = query.eq('possui_transporte', false);
+                // Transporte
+                if (filtros.possuiTransporte === 'true') query = query.eq('possui_transporte', true);
+                if (filtros.possuiTransporte === 'false') query = query.eq('possui_transporte', false);
 
-            // CNH (JSONB containment check or string match in select)
-            if (filtros.cnhCat) {
-                // Filtramos por categoria contida no array categorias do JSONB cnh
-                query = query.contains('cnh', { categorias: [filtros.cnhCat] });
-            }
+                // CNH (JSONB containment check or string match in select)
+                if (filtros.cnhCat) {
+                    // Filtramos por categoria contida no array categorias do JSONB cnh
+                    query = query.contains('cnh', { categorias: [filtros.cnhCat] });
+                }
 
-            // Educação
-            if (filtros.ensinoMedio) {
-                query = query.eq('ensino_medio->>status', filtros.ensinoMedio);
+                // Educação
+                if (filtros.ensinoMedio) {
+                    query = query.eq('ensino_medio->>status', filtros.ensinoMedio);
+                }
             }
             // Nota: Filtraremos Ensino Superior no lado do cliente para percorrer toda a lista de diplomas
 
@@ -1186,7 +1189,7 @@ export default function EmpresaDashboard() {
 
         // Ordenar por maior pontuação
         return processados.sort((a,b) => b.matchScore - a.matchScore);
-    }, [talentos, filtros]);
+    }, [talentos, filtros, activeTab]);
 
     // Nota: O carregamento global foi movido para dentro das abas para evitar o "flicker" e perda de foco nos filtros.
 

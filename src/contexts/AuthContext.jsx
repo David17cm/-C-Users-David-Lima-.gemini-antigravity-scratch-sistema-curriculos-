@@ -1,8 +1,71 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 
 const AuthContext = createContext({});
+
+// ─────────────────────────────────────────────────────────────────
+// Chave do cache de sessão (sessionStorage — dura até fechar o aba)
+// ─────────────────────────────────────────────────────────────────
+const ROLE_CACHE_KEY = 'norte_user_role_cache';
+
+const saveRoleCache = (userId, role, pago) => {
+    try {
+        sessionStorage.setItem(ROLE_CACHE_KEY, JSON.stringify({ userId, role, pago, ts: Date.now() }));
+    } catch (_) { /* Ignora erros de storage (modo privado etc.) */ }
+};
+
+const loadRoleCache = (userId) => {
+    try {
+        const raw = sessionStorage.getItem(ROLE_CACHE_KEY);
+        if (!raw) return null;
+        const cache = JSON.parse(raw);
+        // Cache válido por até 10 minutos — cobre instabilidade de rede de celular
+        const TEN_MIN = 10 * 60 * 1000;
+        if (cache.userId === userId && Date.now() - cache.ts < TEN_MIN) {
+            return { role: cache.role, pago: cache.pago };
+        }
+    } catch (_) { /* Ignora */ }
+    return null;
+};
+
+const clearRoleCache = () => {
+    try { sessionStorage.removeItem(ROLE_CACHE_KEY); } catch (_) { /* Ignora */ }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Retry com backoff exponencial (adaptado para Wi-Fi e 4G/5G)
+// Tentativas: imediata → 800ms → 2s → 4s
+// ─────────────────────────────────────────────────────────────────
+const fetchWithRetry = async (userId, maxRetries = 3) => {
+    const delays = [0, 800, 2000, 4000];
+    let lastErr = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (attempt > 0) {
+            await new Promise(res => setTimeout(res, delays[attempt] ?? 4000));
+        }
+
+        try {
+            const { data, error } = await supabase
+                .from('user_roles')
+                .select('role, pago')
+                .eq('user_id', userId)
+                .maybeSingle();
+
+            if (error) {
+                lastErr = error;
+                continue; // Tenta de novo
+            }
+
+            return { data, error: null };
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+
+    return { data: null, error: lastErr };
+};
 
 export const AuthProvider = ({ children }) => {
     // ESTADO ATÔMICO: Evita "flicker" onde o usuário aparece logado mas o loading está como false,
@@ -15,6 +78,7 @@ export const AuthProvider = ({ children }) => {
     });
 
     const lastFetchedUserId = useRef(null);
+    const isFetchingRole = useRef(false);
 
     // ─────────────────────────────────────────────────────────────────
     // 1. Monitoramento de Sessão (Síncrono)
@@ -28,16 +92,24 @@ export const AuthProvider = ({ children }) => {
             const currentUser = session?.user || null;
 
             if (event === 'SIGNED_OUT') {
+                clearRoleCache();
                 setAuthState({ user: null, role: null, pago: false, loading: false });
                 lastFetchedUserId.current = null;
+                isFetchingRole.current = false;
             } else if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') {
-                setAuthState(prev => ({
-                    ...prev,
-                    user: currentUser,
-                    // Se o usuário mudou ou se carregamos o primeiro usuário no refresh, 
-                    // mantemos loading: true até o useEffect da role processar.
-                    loading: currentUser ? (currentUser.id !== lastFetchedUserId.current) : false
-                }));
+                // Checa se o role já está em cache (evita dependência da rede no F5)
+                const cached = currentUser ? loadRoleCache(currentUser.id) : null;
+                if (cached && currentUser?.id === lastFetchedUserId.current) {
+                    // Já processado e cacheado: apenas atualiza o user sem resetar o loading
+                    setAuthState(prev => ({ ...prev, user: currentUser }));
+                } else {
+                    setAuthState(prev => ({
+                        ...prev,
+                        user: currentUser,
+                        // Se o usuário mudou, mantemos loading: true até o useEffect da role processar.
+                        loading: currentUser ? (currentUser.id !== lastFetchedUserId.current) : false
+                    }));
+                }
             }
         });
 
@@ -48,50 +120,61 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     // ─────────────────────────────────────────────────────────────────
-    // 2. Busca de Perfil/Role (Independente)
+    // 2. Busca de Perfil/Role com Retry + Cache
     // ─────────────────────────────────────────────────────────────────
     useEffect(() => {
-        const { user, role } = authState;
-        
-        // Só busca no banco se houver usuário e ele for diferente do último processado
-        if (!user || user.id === lastFetchedUserId.current) return;
+        const { user } = authState;
+
+        // Só busca no banco se houver usuário novo, diferente do último processado,
+        // e se não houver uma busca já em andamento.
+        if (!user || user.id === lastFetchedUserId.current || isFetchingRole.current) return;
+
+        // Verifica o cache antes de ir ao banco (ideal para recarregamentos com rede instável)
+        const cached = loadRoleCache(user.id);
+        if (cached) {
+            lastFetchedUserId.current = user.id;
+            setAuthState(prev => ({
+                ...prev,
+                role: cached.role,
+                pago: cached.pago ?? false,
+                loading: false
+            }));
+            return;
+        }
 
         let mounted = true;
+        isFetchingRole.current = true;
 
         const fetchUserRole = async () => {
             lastFetchedUserId.current = user.id;
 
-            try {
-                const { data, error } = await supabase
-                    .from('user_roles')
-                    .select('role, pago')
-                    .eq('user_id', user.id)
-                    .maybeSingle();
+            const { data, error } = await fetchWithRetry(user.id, 3);
 
-                if (!mounted) return;
+            if (!mounted) return;
 
-                if (!error && data) {
-                    setAuthState(prev => ({
-                        ...prev,
-                        role: data.role,
-                        pago: data.pago ?? true,
-                        loading: false
-                    }));
-                } else {
-                    // Se não encontrar a role, definimos como 'candidato' como fallback
-                    // MAS apenas removemos o loading para o site não travar.
-                    setAuthState(prev => ({ 
-                        ...prev, 
-                        role: 'candidato', 
-                        pago: false, 
-                        loading: false 
-                    }));
-                }
-            } catch (err) {
-                if (mounted) {
-                    setAuthState(prev => ({ ...prev, role: null, pago: false, loading: false }));
-                }
+            if (!error && data) {
+                saveRoleCache(user.id, data.role, data.pago ?? false);
+                setAuthState(prev => ({
+                    ...prev,
+                    role: data.role,
+                    pago: data.pago ?? true,
+                    loading: false
+                }));
+            } else if (!error && !data) {
+                // Usuário autenticado mas sem role — fallback como candidato
+                saveRoleCache(user.id, 'candidato', false);
+                setAuthState(prev => ({
+                    ...prev,
+                    role: 'candidato',
+                    pago: false,
+                    loading: false
+                }));
+            } else {
+                // Todas as tentativas falharam (rede muito ruim ou servidor fora)
+                setAuthState(prev => ({ ...prev, role: null, pago: false, loading: false }));
             }
+
+            isFetchingRole.current = false;
         };
 
         fetchUserRole();
@@ -99,11 +182,47 @@ export const AuthProvider = ({ children }) => {
         return () => { mounted = false; };
     }, [authState.user]);
 
+    // ─────────────────────────────────────────────────────────────────
+    // 3. refreshRole: Permite que o ProtectedRoute tente novamente
+    //    sem recarregar a página (essencial em conexões de celular instáveis)
+    // ─────────────────────────────────────────────────────────────────
+    const refreshRole = useCallback(async () => {
+        const { user } = authState;
+        if (!user || isFetchingRole.current) return;
+
+        clearRoleCache();
+        isFetchingRole.current = true;
+
+        setAuthState(prev => ({ ...prev, loading: true, role: null }));
+        lastFetchedUserId.current = null; // força rebusca no useEffect
+
+        const { data, error } = await fetchWithRetry(user.id, 3);
+
+        if (!error && data) {
+            saveRoleCache(user.id, data.role, data.pago ?? false);
+            setAuthState(prev => ({
+                ...prev,
+                role: data.role,
+                pago: data.pago ?? true,
+                loading: false
+            }));
+            lastFetchedUserId.current = user.id;
+        } else if (!error && !data) {
+            saveRoleCache(user.id, 'candidato', false);
+            setAuthState(prev => ({ ...prev, role: 'candidato', pago: false, loading: false }));
+            lastFetchedUserId.current = user.id;
+        } else {
+            setAuthState(prev => ({ ...prev, role: null, pago: false, loading: false }));
+        }
+
+        isFetchingRole.current = false;
+    }, [authState]);
+
     // Helpers
     const setPago = (val) => setAuthState(prev => ({ ...prev, pago: val }));
 
     return (
-        <AuthContext.Provider value={{ ...authState, setPago }}>
+        <AuthContext.Provider value={{ ...authState, setPago, refreshRole }}>
             {children}
         </AuthContext.Provider>
     );
