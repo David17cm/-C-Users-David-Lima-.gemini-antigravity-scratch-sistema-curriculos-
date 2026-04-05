@@ -120,7 +120,7 @@ const blockTitle = {
 };
 
 export default function CVWizardPage() {
-    const { user } = useAuth();
+    const { user, pago } = useAuth();
     const navigate = useNavigate();
     const [step, setStep]     = useState(1);
     const [saving, setSaving] = useState(false);
@@ -338,13 +338,20 @@ export default function CVWizardPage() {
                                 href="https://chat.whatsapp.com/LAjyH1ZoYil9vofahhNaLw" 
                                 target="_blank" 
                                 rel="noreferrer"
-                                onClick={() => setShowWppModal(false)}
+                                onClick={() => {
+                                    setShowWppModal(false);
+                                    // Abrir WhatsApp em nova aba e redirecionar conforme status premium
+                                    setTimeout(() => navigate(pago ? '/painel' : '/oferta-premium'), 500);
+                                }}
                                 style={{ background:'#25D366', color:'#fff', padding:'16px', borderRadius:'16px', textDecoration:'none', fontWeight:800, fontSize:'1.1rem', boxShadow:'0 10px 20px rgba(37, 211, 102, 0.25)', transition:'transform 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px' }}
                             >
                                 ENTRAR NO GRUPO VIP
                             </a>
                             <button 
-                                onClick={() => setShowWppModal(false)}
+                                onClick={() => {
+                                    setShowWppModal(false);
+                                    navigate(pago ? '/painel' : '/oferta-premium');
+                                }}
                                 style={{ background:'transparent', border:'none', color:'#94a3b8', padding:'10px', fontWeight:700, fontSize:'0.9rem', cursor:'pointer' }}
                             >
                                 Ir para meu painel

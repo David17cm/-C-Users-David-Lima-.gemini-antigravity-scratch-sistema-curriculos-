@@ -236,13 +236,23 @@ export default function CVPreviewPage() {
                 borderBottom: '1px solid #f1f5f9',
                 fontSize: '10.5pt',
                 color: PREMIUM_COLORS.muted,
-                fontWeight: 600
+                fontWeight: 600,
+                flexWrap: 'wrap'
             }}>
                 {cvData.telefone && <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Phone size={14} color={PREMIUM_COLORS.darkGreen} /> {cvData.telefone}</div>}
                 <div style={{ width: '1px', height: '14px', background: '#e2e8f0' }} />
                 {cvData.email && <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={14} color={PREMIUM_COLORS.darkGreen} /> {cvData.email}</div>}
                 <div style={{ width: '1px', height: '14px', background: '#e2e8f0' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={14} color={PREMIUM_COLORS.darkGreen} /> {cvData.cidade || 'Santarém'} - {cvData.bairro || 'PA'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MapPin size={14} color={PREMIUM_COLORS.darkGreen} /> 
+                    {cvData.bairro}{cvData.cidade ? ` - ${cvData.cidade}` : ''}
+                </div>
+                {cvData.genero && (
+                    <>
+                        <div style={{ width: '1px', height: '14px', background: '#e2e8f0' }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>👤 {cvData.genero}</div>
+                    </>
+                )}
             </div>
 
             {/* 📄 3. CORPO DO CURRÍCULO (ÚNICA COLUNA) */}
@@ -330,9 +340,8 @@ export default function CVPreviewPage() {
             </div>
 
             {/* Footer fixo para Premium */}
-            <div style={{ padding: '20px 50px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '8.5pt', color: '#94a3b8', background: '#fcfcfc' }}>
-                <span>Gerado por Norte Vagas</span>
-                <span style={{ fontWeight: 700 }}>nortevagas.com.br</span>
+            <div style={{ padding: '20px 50px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '8.5pt', color: '#94a3b8', background: '#fcfcfc' }}>
+                <span style={{ fontWeight: 700 }}>Norte Vagas</span>
             </div>
         </div>
     );
@@ -374,7 +383,13 @@ export default function CVPreviewPage() {
                         {cvData.bairro && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', gridColumn: 'span 2' }}>
                                 <span style={{ width: '18px', textAlign: 'center' }}>📍</span> 
-                                <span>{cvData.bairro} — {cvData.cidade || 'PA'}</span>
+                                <span>{cvData.bairro} — {cvData.cidade || 'Santarém'}</span>
+                            </div>
+                        )}
+                        {cvData.genero && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '18px', textAlign: 'center' }}>👤</span> 
+                                <span>Gênero: {cvData.genero}</span>
                             </div>
                         )}
                         {cvData.cnh?.possui && (

@@ -16,6 +16,7 @@ import PrivacyPage from './pages/PrivacyPage';
 import LegalPage from './pages/LegalPage';
 import CVWizardPage from './pages/CVWizardPage';
 import CandidateStats from './pages/CandidateStats';
+import PremiumOfferPage from './pages/PremiumOfferPage';
 import TrackerWrapper from './components/layout/TrackerWrapper';
 import CookieBanner from './components/ui/CookieBanner';
 import NotificationPrompt from './components/notifications/NotificationPrompt';
@@ -80,6 +81,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/estatisticas" element={
           <ProtectedRoute allowedRoles={['candidato']}>
             <CandidateStats />
+          </ProtectedRoute>
+        } />
+        <Route path="/oferta-premium" element={
+          <ProtectedRoute allowedRoles={['candidato']}>
+            <PremiumOfferPage />
           </ProtectedRoute>
         } />
 

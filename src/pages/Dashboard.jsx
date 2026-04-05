@@ -81,6 +81,30 @@ export default function Dashboard() {
         return () => clearTimeout(saveTimeoutRef.current);
     }, [formData]);
 
+    // TRACKING: Logar quando o usuário visualiza a oferta premium
+    useEffect(() => {
+        if (user && !pago && !authLoading) {
+            const logOfferVisit = async () => {
+                const sessionKey = `view_premium_${user.id}_${new Date().toISOString().split('T')[0]}`;
+                if (sessionStorage.getItem(sessionKey)) return;
+
+                try {
+                    await supabase.from('access_logs').insert([{
+                        user_id: user.id,
+                        email: user.email,
+                        action: 'view_premium_offer',
+                        user_agent: navigator.userAgent,
+                        accessed_at: new Date().toISOString()
+                    }]);
+                    sessionStorage.setItem(sessionKey, 'true');
+                } catch (e) {
+                    console.error('Erro ao logar visualização de oferta:', e);
+                }
+            };
+            logOfferVisit();
+        }
+    }, [user, pago, authLoading]);
+
     const fetchCurriculo = async (userId) => {
         try {
             const { data } = await supabase.from('curriculos').select('*').eq('user_id', userId).maybeSingle();
@@ -184,46 +208,56 @@ export default function Dashboard() {
                     <div className="premium-banner" style={{
                         background: 'linear-gradient(135deg, #7c3aed 0%, #4338ca 100%)',
                         borderRadius: '16px',
-                        padding: '1.5rem 2rem',
-                        marginBottom: '2rem',
+                        padding: '1.5rem 2.5rem',
+                        marginBottom: '2.5rem',
                         color: '#fff',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         flexWrap: 'wrap',
-                        gap: '1.5rem',
-                        boxShadow: '0 10px 25px -5px rgba(124, 58, 237, 0.4)',
+                        gap: '2rem',
+                        boxShadow: '0 15px 35px -5px rgba(124, 58, 237, 0.4)',
                         position: 'relative',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        border: '1px solid rgba(255, 255, 255, 0.1)'
                     }}>
                         <div style={{ position: 'relative', zIndex: 2 }}>
-                            <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <Award color="#fbbf24" fill="#fbbf24" size={28} /> SEJA UM CANDIDATO PREMIUM
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '12px', letterSpacing: '0.5px' }}>
+                                <Award color="#fbbf24" fill="#fbbf24" size={32} /> SEJA UM CANDIDATO PREMIUM
                             </h3>
-                            <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: '0.95rem', maxWidth: '500px' }}>
-                                Desbloqueie o **Selo de Perfil Verificado**, veja quem visitou seu currículo e tenha acesso a modelos exclusivos por apenas **R$ 7,90**.
+                            <p style={{ margin: '10px 0 0 0', opacity: 0.95, fontSize: '1rem', maxWidth: '520px', lineHeight: 1.5 }}>
+                                Desbloqueie o <strong>Selo de Perfil Verificado</strong>, veja quem visitou seu currículo e tenha acesso a modelos exclusivos por apenas <strong>R$ 7,90</strong>.
                             </p>
                         </div>
                         <button 
                             onClick={() => window.open(`https://pay.cakto.com.br/fzowxw7_836819?refId=${user.id}`, '_blank')}
-                            className="neon-button" 
                             style={{ 
                                 background: '#fff', 
                                 color: '#7c3aed', 
                                 width: 'auto', 
                                 margin: 0, 
                                 fontWeight: 900, 
-                                padding: '12px 30px', 
-                                boxShadow: '0 4px 15px rgba(255,255,255,0.3)',
-                                fontSize: '1rem'
+                                padding: '14px 32px', 
+                                boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+                                fontSize: '1rem',
+                                borderRadius: '10px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                zIndex: 2
                             }}
+                            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                         >
                             QUERO SER PREMIUM 🚀
                         </button>
                         
-                        {/* Decoração de fundo */}
-                        <div style={{ position: 'absolute', right: '-20px', bottom: '-20px', opacity: 0.1 }}>
-                            <Award size={150} />
+                        {/* Decoração de fundo conforme imagem */}
+                        <div style={{ position: 'absolute', right: '-40px', bottom: '-40px', opacity: 0.15, zIndex: 1 }}>
+                            <Award size={200} />
                         </div>
                     </div>
                 )}
@@ -277,10 +311,39 @@ export default function Dashboard() {
                         <SectionHeader icon={User} title="Dados Pessoais" id="basico" />
                         {openSections.basico && (
                             <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-                                <div className="input-group"><label>Nome Completo *</label><input className="neon-input" value={formData.nome || ''} onChange={e => setFormData({...formData, nome: e.target.value})} /></div>
-                                <div className="input-group"><label>Telefone / WhatsApp *</label><input className="neon-input" value={formData.telefone || ''} onChange={e => setFormData({...formData, telefone: maskPhone(e.target.value)})} /></div>
-                                <div className="input-group"><label>Data de Nascimento *</label><input className="neon-input" type="date" value={formData.dataNascimento || ''} onChange={e => setFormData({...formData, dataNascimento: e.target.value})} /></div>
-                                <div className="input-group"><label>Bairro *</label><input className="neon-input" value={formData.bairro || ''} onChange={e => setFormData({...formData, bairro: e.target.value})} /></div>
+                                <div className="input-group">
+                                    <label>Nome Completo *</label>
+                                    <input className="neon-input" value={formData.nome || ''} onChange={e => setFormData({...formData, nome: e.target.value})} />
+                                </div>
+                                <div className="input-group">
+                                    <label>Telefone / WhatsApp *</label>
+                                    <input className="neon-input" value={formData.telefone || ''} onChange={e => setFormData({...formData, telefone: maskPhone(e.target.value)})} />
+                                </div>
+                                <div className="input-group">
+                                    <label>Data de Nascimento *</label>
+                                    <input className="neon-input" type="date" value={formData.dataNascimento || ''} onChange={e => setFormData({...formData, dataNascimento: e.target.value})} />
+                                </div>
+                                <div className="input-group">
+                                    <label>Gênero *</label>
+                                    <select className="neon-input" value={formData.genero || ''} onChange={e => setFormData({...formData, genero: e.target.value})}>
+                                        <option value="">Selecione...</option>
+                                        <option value="Masculino">Masculino</option>
+                                        <option value="Feminino">Feminino</option>
+                                        <option value="Prefiro não dizer">Prefiro não dizer</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label>Cidade *</label>
+                                    <input className="neon-input" value={formData.cidade || ''} onChange={e => setFormData({...formData, cidade: e.target.value})} placeholder="Sua cidade" />
+                                </div>
+                                <div className="input-group">
+                                    <label>Bairro *</label>
+                                    <input className="neon-input" value={formData.bairro || ''} onChange={e => setFormData({...formData, bairro: e.target.value})} />
+                                </div>
+                                <div className="input-group" style={{ gridColumn: 'span 1' }}>
+                                    <label>Endereço (Rua e Nº) *</label>
+                                    <input className="neon-input" value={formData.endereco || ''} onChange={e => setFormData({...formData, endereco: e.target.value})} placeholder="Ex: Av. Brasil, 123" />
+                                </div>
                             </div>
                         )}
                     </div>

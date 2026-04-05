@@ -107,14 +107,14 @@ export default function LandingPage() {
                     <div>
                         <p style={{ fontWeight: '800', color: 'var(--norte-dark-green)', marginBottom: '1rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>Suporte</p>
                         <p style={{ margin: 0, lineHeight: 1.7 }}>
-                            atendimento@norteempregos.com.br<br />
+                            suporte@nortevagas.online<br />
                             Santarém - Pará - Amazônia
                         </p>
                     </div>
                 </div>
 
                 <div style={{ maxWidth: '1000px', margin: '3rem auto 0', paddingTop: '1.5rem', borderTop: '1px solid #f1f5f9', textAlign: 'center', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                    <span style={{ fontWeight: 600 }}>&copy; 2026 Norte Empregos. Todos os direitos reservados.</span>
+                    <span style={{ fontWeight: 600 }}>&copy; 2026 Norte Vagas. Todos os direitos reservados.</span>
                     <span style={{ background: 'var(--norte-green)', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800 }}>VERSÃO 2.5 ATUALIZADA ✅</span>
                 </div>
             </footer>

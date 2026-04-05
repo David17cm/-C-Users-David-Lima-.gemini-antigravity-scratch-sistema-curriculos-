@@ -32,6 +32,7 @@ export default function VagasPage() {
     const [toast, setToast] = useState({ message: '', type: 'info' });
     const [profilePhoto, setProfilePhoto] = useState(null);
     const [showMotivModal, setShowMotivModal] = useState(false);
+    const [showApplySuccess, setShowApplySuccess] = useState(false); // Modal de Follow-up Premium
     const [scoreWarning, setScoreWarning] = useState(null); // { score, missing, vaga }
     
     // Estados para Paginação e Debounce
@@ -40,7 +41,7 @@ export default function VagasPage() {
     const [totalCount, setTotalCount] = useState(0);
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, pago } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -150,9 +151,16 @@ export default function VagasPage() {
         try {
             const { error } = await supabase.from('candidaturas').insert([{ user_id: user.id, vaga_id: vaga.id }]);
             if (error) throw error;
-            showToast('Candidatura enviada com sucesso! 🚀');
+            
+            // Sucesso! Só mostramos o Follow-up do Selo Premium se o usuário ainda NÃO for pago
             fetchCandidaturas();
-            if (selectedVaga?.id === vaga.id) setSelectedVaga(null); // Fecha modal de detalhes se estiver aberto
+            if (!pago) {
+                setShowApplySuccess(true); 
+            } else {
+                showToast('Candidatura enviada com sucesso! 🚀');
+            }
+            
+            if (selectedVaga?.id === vaga.id) setSelectedVaga(null); 
         } catch (err) {
             showToast('Erro ao se candidatar: ' + err.message, 'error');
         } finally {
@@ -436,6 +444,103 @@ export default function VagasPage() {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Modal de Follow-up Selo Premium (Pós-Candidatura) */}
+            {showApplySuccess && (
+                <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.85)', backdropFilter:'blur(4px)', zIndex:4000, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}>
+                    <div style={{ 
+                        background:'#fff', borderRadius:'32px', width:'100%', 
+                        maxWidth: window.innerWidth < 768 ? '420px' : '480px', 
+                        padding: window.innerWidth < 768 ? '2.5rem 1.75rem' : '3.5rem 3rem', 
+                        textAlign:'center', position:'relative',
+                        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+                        animation: 'popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center'
+                    }}>
+                        {/* Ícone de Sucesso Superior */}
+                        <div style={{ width:'70px', height:'70px', background:'#f0fdf4', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'1.5rem', border:'1px solid #dcfce7', flexShrink:0 }}>
+                            <CheckCircle size={36} color="#22c55e" />
+                        </div>
+                        
+                        {/* Candidatura Enviada com Ícone de Envelope */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '1.25rem' }}>
+                            <div style={{ marginBottom: '0.25rem', opacity: 0.8 }}>
+                                <svg width="38" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M4 4H20C21.1 4 22 4.9 22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4Z" stroke="#0f172a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M22 6L12 13L2 6" stroke="#0f172a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M12 2V6" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M9 4.5L12 7.5L15 4.5" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                            </div>
+                            <h1 style={{ 
+                                fontSize: '2rem', 
+                                fontWeight: 900, color:'#1e293b', margin:0, lineHeight:1.2 
+                            }}>
+                                📩 Candidatura enviada
+                            </h1>
+                        </div>
+
+                        <p style={{ color:'#64748b', fontSize:'1.1rem', fontWeight:600, marginBottom:'1.5rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>👀</span> Agora é com a empresa
+                        </p>
+                        
+                        <div style={{ marginBottom:'2.5rem' }}>
+                            <p style={{ margin:'0 0 8px 0', fontSize:'1rem', color:'#f97316', fontWeight:800 }}>🔥 +37 candidatos já ativaram o perfil profissional</p>
+                            <p style={{ margin:0, fontSize:'1.15rem', color:'#065f46', fontWeight:900 }}>Quem se destaca, é lembrado</p>
+                        </div>
+
+                        {/* Box de Oferta Refinado */}
+                        <div style={{ background:'#f8fafc', borderRadius:'24px', padding:'1.75rem 1.25rem', marginBottom:'2.5rem', border:'1px solid #eef2f6', width: '100%' }}>
+                            <p style={{ margin:'0 0 1.5rem 0', fontSize:'0.95rem', color:'#0f172a', fontWeight:800, lineHeight:1.3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                🔓 Ative seu perfil agora
+                            </p>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', alignItems: 'end', gap: '4px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: 700 }}>De</span>
+                                    <span style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 800, textDecoration: 'line-through' }}>29,90</span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.9rem', color: '#1e293b', fontWeight: 700 }}>por</span>
+                                    <span style={{ fontSize: '1rem', color: '#1e293b', fontWeight: 800 }}>apenas</span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span style={{ fontSize: '1.2rem' }}>💰</span>
+                                        <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#059669' }}>R$</span>
+                                    </div>
+                                    <span style={{ fontSize: '2rem', fontWeight: 950, color: '#059669', lineHeight: 1 }}>7,90</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display:'flex', flexDirection:'column', gap:'16px', width: '100%' }}>
+                            <button 
+                                onClick={() => navigate('/oferta-premium')}
+                                style={{ 
+                                    margin:0, background:'#059669', color: '#fff', border: 'none',
+                                    fontWeight:900, fontSize:'1.1rem', borderRadius:'20px', padding:'1.5rem',
+                                    cursor: 'pointer', transition: 'transform 0.2s', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px'
+                                }}
+                            >
+                                QUERO ME DESTACAR AGORA 🚀
+                            </button>
+                            <button 
+                                onClick={() => setShowApplySuccess(false)}
+                                style={{ background:'transparent', border:'none', color:'#94a3b8', fontWeight:700, fontSize:'1rem', cursor:'pointer' }}
+                            >
+                                Não, apenas continuar
+                            </button>
+                        </div>
+                    </div>
+                    <style>{`
+                        @keyframes popIn {
+                            from { opacity: 0; transform: scale(0.9) translateY(20px); }
+                            to { opacity: 1; transform: scale(1) translateY(0); }
+                        }
+                    `}</style>
                 </div>
             )}
 

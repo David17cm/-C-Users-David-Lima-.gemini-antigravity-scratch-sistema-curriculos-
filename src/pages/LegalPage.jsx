@@ -20,7 +20,7 @@ export default function LegalPage() {
             content: (
                 <>
                     <h3>1. Aceitação dos Termos</h3>
-                    <p>Ao acessar e utilizar a plataforma Norte Empregos, você declara ter lido, compreendido e concordado integralmente com estes Termos de Uso. Se não concordar com qualquer cláusula, não utilize os serviços.</p>
+                    <p>Ao acessar e utilizar a plataforma Norte Vagas, você declara ter lido, compreendido e concordado integralmente com estes Termos de Uso. Se não concordar com qualquer cláusula, não utilize os serviços.</p>
                     <h3>2. Descrição do Serviço</h3>
                     <p>A plataforma oferece um sistema de criação e gestão de currículos profissionais, conectando candidatos a empresas recrutadoras. Reservamo-nos o direito de modificar, suspender ou descontinuar qualquer funcionalidade a qualquer momento.</p>
                     <h3>3. Limitação de Responsabilidade</h3>
@@ -28,7 +28,7 @@ export default function LegalPage() {
                     <h3>4. Resolução de Disputas</h3>
                     <p>Eventuais conflitos decorrentes destes Termos serão resolvidos prioritariamente por acordo direto entre as partes. Na impossibilidade de acordo, fica eleito o foro da comarca competente da sede da plataforma.</p>
                     <h3>5. Casos de Sucesso e Divulgação</h3>
-                    <p>Ao utilizar a plataforma e obter uma contratação, o usuário autoriza expressamente a Norte Empregos a utilizar seu nome e imagem para divulgação de "Cases de Sucesso" em nossas redes sociais e materiais de marketing.</p>
+                    <p>Ao utilizar a plataforma e obter uma contratação, o usuário autoriza expressamente a Norte Vagas a utilizar seu nome e imagem para divulgação de "Cases de Sucesso" em nossas redes sociais e materiais de marketing.</p>
 
                 </>
             )
@@ -52,7 +52,7 @@ export default function LegalPage() {
                     <h3>5. Seus Direitos (LGPD)</h3>
                     <p>Você tem direito a: acessar seus dados; corrigir informações incorretas; excluir sua conta e dados; exportar seus dados; revogar o consentimento dado.</p>
                     <h3>6. Contato do Encarregado de Dados (DPO)</h3>
-                    <p>Para exercer seus direitos ou enviar dúvidas sobre privacidade, entre em contato pelo e-mail: <strong>privacidade@norteempregos.com.br</strong></p>
+                    <p>Para exercer seus direitos ou enviar dúvidas sobre privacidade, entre em contato pelo e-mail: <strong>privacidade@nortevagas.online</strong></p>
                 </>
             )
         },
@@ -90,7 +90,7 @@ export default function LegalPage() {
                         <li>Cobrar qualquer valor de candidatos para participação em processos seletivos</li>
                     </ul>
                     <h3>2. Como Denunciar</h3>
-                    <p>Se você identificar uma vaga suspeita ou comportamento fraudulento, utilize o botão "Denunciar" disponível em cada vaga ou entre em contato pelo e-mail: <strong>suporte@norteempregos.com.br</strong></p>
+                    <p>Se você identificar uma vaga suspeita ou comportamento fraudulento, utilize o botão "Denunciar" disponível em cada vaga ou entre em contato pelo e-mail: <strong>suporte@nortevagas.online</strong></p>
                     <h3>3. Punições</h3>
                     <p>Violações resultarão em remoção imediata da conta e poderão ser reportadas às autoridades competentes, inclusive à Polícia Civil e ao Ministério Público.</p>
                 </>
@@ -129,7 +129,7 @@ export default function LegalPage() {
 
             const exportData = {
                 exportado_em: new Date().toISOString(),
-                plataforma: 'Norte Empregos',
+                plataforma: 'Norte Vagas',
                 usuario: { id: user.id, email: user.email },
                 curriculo: curriculo || 'Nenhum currículo cadastrado',
                 candidaturas: candidaturas || [],
@@ -256,7 +256,7 @@ export default function LegalPage() {
 
                 <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
                     <h1 style={{ color: '#0f172a', fontSize: '2rem', fontWeight: 900, marginBottom: '0.5rem' }}>⚖️ Central Legal</h1>
-                    <p style={{ color: '#64748b', fontSize: '0.95rem' }}>Toda a documentação legal e políticas da plataforma Norte Empregos.</p>
+                    <p style={{ color: '#64748b', fontSize: '0.95rem' }}>Toda a documentação legal e políticas da plataforma Norte Vagas.</p>
                 </div>
 
                 <div className="grid-legal">

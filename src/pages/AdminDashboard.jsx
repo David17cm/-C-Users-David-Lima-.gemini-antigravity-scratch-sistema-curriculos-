@@ -6,14 +6,17 @@ import {
     Activity, Users, Briefcase, Mail, LogOut, ArrowRight,
     Filter, RefreshCw, ShieldAlert, Trash2, CheckCircle, Clock,
     Building, BarChart2, Shield, AlertTriangle, Database,
-    Plus, Download, Search, XCircle, Send, Lock, Menu, X, Compass, Bell
+    Plus, Download, Search, XCircle, Send, Lock, Menu, X, Compass, Bell, DollarSign, TrendingUp,
+    FileText, Tag, Award
 } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import BrandLogo from '../components/layout/BrandLogo';
+import ConfirmModal from '../components/modals/ConfirmModal';
 
 const TABS = [
     { id: 'visao', label: 'Monitoramento', icon: Activity },
     { id: 'usuarios', label: 'Candidatos', icon: Users },
+    { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
     { id: 'empresas', label: 'Parceiros', icon: Building },
     { id: 'vagas', label: 'Curadoria', icon: Briefcase },
     { id: 'metricas', label: 'Inteligência', icon: BarChart2 },
@@ -222,6 +225,11 @@ export default function AdminDashboard() {
     const [recentNotifications, setRecentNotifications] = useState([]);
     const [registrationData, setRegistrationData] = useState([]);
     const [chartPeriod, setChartPeriod] = useState(7);
+    const [financeiroStats, setFinanceiroStats] = useState({ 
+        revenue: { today: 0, month: 0, total: 0 }, 
+        funnel: { registered: 0, cv_created: 0, offer_viewed: 0, purchased: 0 },
+        recentTransactions: []
+    });
 
     // Push Notifications
     const [pushTitle, setPushTitle] = useState('');
@@ -229,6 +237,9 @@ export default function AdminDashboard() {
     const [pushUrl, setPushUrl] = useState('/vagas');
     const [pushSubscribers, setPushSubscribers] = useState(0);
     const [isSendingPush, setIsSendingPush] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({ 
+        isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' 
+    });
 
     const carregarSubscriptions = async () => {
         const { count } = await supabase
@@ -243,30 +254,36 @@ export default function AdminDashboard() {
         setTimeout(() => setNotification(null), 5000);
     };
 
-    const handleBroadcastPush = async (e) => {
-        e.preventDefault();
+    const handleBroadcastPush = (e) => {
+        if (e) e.preventDefault();
         if (!pushTitle || !pushBody) return notify('Preencha título e mensagem!', 'error');
-        if (!window.confirm(`Deseja enviar esta notificação para ${pushSubscribers} usuários?`)) return;
+        
+        setConfirmModal({
+            isOpen: true,
+            type: 'warning',
+            title: '🚀 Disparar Notificação Push',
+            message: `Você está prestes a enviar esta notificação para ${pushSubscribers} usuários. Deseja continuar?`,
+            onConfirm: async () => {
+                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                setIsSendingPush(true);
+                try {
+                    const { data, error } = await supabase.functions.invoke('broadcast-push', {
+                        body: { title: pushTitle, body: pushBody, url: pushUrl }
+                    });
 
-        setIsSendingPush(true);
-        try {
-            const { data, error } = await supabase.functions.invoke('broadcast-push', {
-                body: { title: pushTitle, body: pushBody, url: pushUrl }
-            });
-
-            if (error) throw error;
-            
-            const totalSent = data?.success || 0;
-            notify(`🚀 ${totalSent} notificações disparadas com sucesso!`);
-            
-            setPushTitle('');
-            setPushBody('');
-        } catch (err) {
-            console.error('Erro ao enviar push:', err);
-            notify('Falha ao enviar: ' + err.message, 'error');
-        } finally {
-            setIsSendingPush(false);
-        }
+                    if (error) throw error;
+                    const totalSent = data?.success || 0;
+                    notify(`🚀 ${totalSent} notificações disparadas com sucesso!`);
+                    setPushTitle('');
+                    setPushBody('');
+                } catch (err) {
+                    console.error('Erro ao enviar push:', err);
+                    notify('Falha ao enviar: ' + err.message, 'error');
+                } finally {
+                    setIsSendingPush(false);
+                }
+            }
+        });
     };
     const [isSendingEmails, setIsSendingEmails] = useState(false);
     const [sendProgress, setSendProgress] = useState(null);
@@ -316,6 +333,7 @@ export default function AdminDashboard() {
 
         if (activeTab === 'visao') carregarVisaoGeral();
         if (activeTab === 'usuarios') carregarUsuarios();
+        if (activeTab === 'financeiro') carregarFinanceiro();
         if (activeTab === 'empresas') carregarTodasEmpresas();
         if (activeTab === 'vagas') carregarVagas();
         if (activeTab === 'metricas') {
@@ -643,165 +661,187 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleDisparoRecuperacao = async () => {
-        if (!window.confirm('Deseja iniciar o disparo de e-mails para todos os candidatos que logaram hoje e ainda não completaram o currículo?')) return;
-        
-        setIsSendingEmails(true);
-        setSendProgress('Identificando candidatos...');
-        
-        try {
-            const { data: list, error: rpcError } = await supabase.rpc('preparar_notificacoes_recuperacao_hoje');
-            
-            if (rpcError) throw rpcError;
-            
-            if (!list || list.length === 0) {
-                alert('Nenhum candidato pendente identificado para hoje!');
-                setIsSendingEmails(false);
-                setSendProgress(null);
-                return;
-            }
-
-            let successCount = 0;
-            for (let i = 0; i < list.length; i++) {
-                const item = list[i];
-                setSendProgress(`Enviando ${i + 1} de ${list.length}...`);
-                
+    const handleDisparoRecuperacao = () => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'warning',
+            title: '📧 Recuperação de Candidatos',
+            message: 'Deseja iniciar o disparo de e-mails para todos os candidatos que logaram hoje e ainda não completaram o currículo?',
+            onConfirm: async () => {
+                setConfirmModal(p => ({ ...p, isOpen: false }));
+                setIsSendingEmails(true);
+                setSendProgress('Identificando candidatos...');
                 try {
-                    const { error: fnError } = await supabase.functions.invoke('send-delayed-email', {
-                        body: { 
-                            notificationId: item.notification_id, 
-                            userEmail: item.user_email, 
-                            type: 'sem_curriculo' 
-                        }
-                    });
-                    if (!fnError) successCount++;
-                } catch (e) {
-                    console.error('Erro no despacho individual:', e);
+                    const { data: list, error: rpcError } = await supabase.rpc('preparar_notificacoes_recuperacao_hoje');
+                    if (rpcError) throw rpcError;
+                    if (!list || list.length === 0) {
+                        alert('Nenhum candidato pendente identificado para hoje!');
+                        setIsSendingEmails(false);
+                        setSendProgress(null);
+                        return;
+                    }
+                    let successCount = 0;
+                    for (let i = 0; i < list.length; i++) {
+                        const item = list[i];
+                        setSendProgress(`Enviando ${i + 1} de ${list.length}...`);
+                        try {
+                            const { error: fnError } = await supabase.functions.invoke('send-delayed-email', {
+                                body: { notificationId: item.notification_id, userEmail: item.user_email, type: 'sem_curriculo' }
+                            });
+                            if (!fnError) successCount++;
+                        } catch (e) { console.error('Erro no despacho:', e); }
+                    }
+                    alert(`Disparo concluído! ${successCount} e-mails enviados.`);
+                    carregarAutomacao();
+                } catch (err) {
+                    console.error('Erro no disparo:', err);
+                    alert('Falha ao processar disparo.');
+                } finally {
+                    setIsSendingEmails(false);
+                    setSendProgress(null);
                 }
             }
+        });
+    };
 
-            alert(`Disparo concluído! ${successCount} e-mails enviados.`);
-            carregarAutomacao();
+    const handleDisparoNovasVagas = () => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'warning',
+            title: '📢 Broadcast de Novas Vagas',
+            message: 'Deseja enviar um e-mail para TODOS os candidatos cadastrados alertando sobre as novas vagas? Esta ação pode levar alguns minutos.',
+            onConfirm: async () => {
+                setConfirmModal(p => ({ ...p, isOpen: false }));
+                setIsSendingBroadcast(true);
+                setBroadcastProgress('Buscando candidatos...');
+                
+                try {
+                    const { data: candidatos, error: fetchError } = await supabase
+                        .from('curriculos')
+                        .select('email, user_id');
+
+                    if (fetchError) throw fetchError;
+
+                    if (!candidatos || candidatos.length === 0) {
+                        alert('Nenhum candidato com e-mail cadastrado encontrado!');
+                        setIsSendingBroadcast(false);
+                        setBroadcastProgress(null);
+                        return;
+                    }
+
+                    let successCount = 0;
+                    for (let i = 0; i < candidatos.length; i++) {
+                        const cand = candidatos[i];
+                        setBroadcastProgress(`Enviando ${i + 1} de ${candidatos.length}...`);
+
+                        try {
+                            const { error: fnError } = await supabase.functions.invoke('send-delayed-email', {
+                                body: { userEmail: cand.email, type: 'novas_vagas' }
+                            });
+                            if (!fnError) successCount++;
+                        } catch (e) {
+                            console.error(`Erro ao disparar para ${cand.email}:`, e);
+                        }
+                        
+                        await new Promise(res => setTimeout(res, 100));
+                    }
+
+                    alert(`📢 Broadcast concluído! ${successCount} e-mails de vagas enviados com sucesso.`);
+                    carregarAutomacao();
+                } catch (err) {
+                    console.error('Erro no broadcast de vagas:', err);
+                    alert('Falha crítica ao processar broadcast.');
+                } finally {
+                    setIsSendingBroadcast(false);
+                    setBroadcastProgress(null);
+                }
+            }
+        });
+    };
+
+    const carregarFinanceiro = async () => {
+        setLoading(true);
+        try {
+            const [
+                { data: revenue },
+                { data: funnel },
+                { data: recent }
+            ] = await Promise.all([
+                supabase.rpc('get_revenue_stats'),
+                supabase.rpc('get_payment_funnel'),
+                supabase.from('transacoes').select('*, user_roles(user_id, pago)').order('created_at', { ascending: false }).limit(20)
+            ]);
+
+            setFinanceiroStats({
+                revenue: revenue || { today: 0, month: 0, total: 0 },
+                funnel: funnel || { registered: 0, cv_created: 0, offer_viewed: 0, purchased: 0 },
+                recentTransactions: recent || []
+            });
         } catch (err) {
-            console.error('Erro no disparo em lote:', err);
-            alert('Falha ao processar disparo em lote.');
+            console.error('Erro ao carregar financeiro:', err);
+            notify('Falha ao carregar dados financeiros', 'error');
         } finally {
-            setIsSendingEmails(false);
-            setSendProgress(null);
+            setLoading(false);
         }
     };
 
-    const handleDisparoNovasVagas = async () => {
-        if (!window.confirm('📢 Deseja enviar um e-mail para TODOS os candidatos cadastrados alertando sobre as novas vagas?')) return;
-        
-        setIsSendingBroadcast(true);
-        setBroadcastProgress('Buscando candidatos...');
-        
-        try {
-            // 1. Buscar todos os candidatos (e-mails) da tabela user_roles cruzando com curriculos ou direto de curriculos
-            const { data: candidatos, error: fetchError } = await supabase
-                .from('curriculos')
-                .select('email, user_id');
-
-            if (fetchError) throw fetchError;
-
-            if (!candidatos || candidatos.length === 0) {
-                alert('Nenhum candidato com e-mail cadastrado encontrado!');
-                setIsSendingBroadcast(false);
-                setBroadcastProgress(null);
-                return;
-            }
-
-            let successCount = 0;
-            // 2. Loop de disparo
-            for (let i = 0; i < candidatos.length; i++) {
-                const cand = candidatos[i];
-                setBroadcastProgress(`Enviando ${i + 1} de ${candidatos.length}...`);
-
-                try {
-                    // Chamada para a Edge Function com o tipo 'novas_vagas'
-                    const { error: fnError } = await supabase.functions.invoke('send-delayed-email', {
-                        body: { 
-                            userEmail: cand.email, 
-                            type: 'novas_vagas' 
-                        }
-                    });
-                    if (!fnError) successCount++;
-                } catch (e) {
-                    console.error(`Erro ao disparar para ${cand.email}:`, e);
-                }
+    const handleDisparoSemInscricao = () => {
+        setConfirmModal({
+            isOpen: true,
+            type: 'warning',
+            title: '🎯 Incentivo à Candidatura',
+            message: 'Deseja iniciar o disparo para candidatos que NUNCA se candidataram a nenhuma vaga?',
+            onConfirm: async () => {
+                setConfirmModal(p => ({ ...p, isOpen: false }));
+                setIsSendingBroadcast(true);
+                setBroadcastProgress('Filtrando candidatos...');
                 
-                // Pequeno delay para evitar sobrecarga (opcional)
-                await new Promise(res => setTimeout(res, 100));
-            }
-
-            alert(`📢 Broadcast concluído! ${successCount} e-mails de vagas enviados com sucesso.`);
-            carregarAutomacao();
-        } catch (err) {
-            console.error('Erro no broadcast de vagas:', err);
-            alert('Falha crítica ao processar broadcast.');
-        } finally {
-            setIsSendingBroadcast(false);
-            setBroadcastProgress(null);
-        }
-    };
-
-    const handleDisparoSemInscricao = async () => {
-        if (!window.confirm('🎯 Deseja iniciar o disparo para candidatos que NUNCA se candidataram a nenhuma vaga?')) return;
-        
-        setIsSendingBroadcast(true);
-        setBroadcastProgress('Filtrando candidatos...');
-        
-        try {
-            // 1. Buscar IDs de quem já se candidatou
-            const { data: allCandidaturas } = await supabase.from('candidaturas').select('user_id');
-            const idsComInscricao = new Set((allCandidaturas || []).map(c => c.user_id));
-            
-            // 2. Buscar todos os candidatos
-            const { data: allCandidatos, error: errC } = await supabase
-                .from('curriculos')
-                .select('email, user_id');
-            
-            if (errC) throw errC;
-            
-            // 3. Filtrar somente os que não tem inscrição
-            const candidatosAlvo = allCandidatos.filter(c => !idsComInscricao.has(c.user_id));
-
-            if (candidatosAlvo.length === 0) {
-                alert('Nenhum candidato pendente encontrado!');
-                setIsSendingBroadcast(false);
-                setBroadcastProgress(null);
-                return;
-            }
-
-            let successCount = 0;
-            for (let i = 0; i < candidatosAlvo.length; i++) {
-                const cand = candidatosAlvo[i];
-                setBroadcastProgress(`Enviando ${i + 1} de ${candidatosAlvo.length}...`);
-
                 try {
-                    const { error: fnError } = await supabase.functions.invoke('send-delayed-email', {
-                        body: { 
-                            userEmail: cand.email, 
-                            type: 'novas_vagas' 
-                        }
-                    });
-                    if (!fnError) successCount++;
-                } catch (e) {
-                    console.error(`Erro ao disparar para ${cand.email}:`, e);
-                }
-                await new Promise(res => setTimeout(res, 100));
-            }
+                    const { data: allCandidaturas } = await supabase.from('candidaturas').select('user_id');
+                    const idsComInscricao = new Set((allCandidaturas || []).map(c => c.user_id));
+                    
+                    const { data: allCandidatos, error: errC } = await supabase
+                        .from('curriculos')
+                        .select('email, user_id');
+                    
+                    if (errC) throw errC;
+                    
+                    const candidatosAlvo = allCandidatos.filter(c => !idsComInscricao.has(c.user_id));
 
-            alert(`🎯 Sucesso! ${successCount} e-mails enviados para incentivar a primeira candidatura.`);
-            carregarAutomacao();
-        } catch (err) {
-            console.error('Erro no disparo:', err);
-            alert('Falha ao processar disparo.');
-        } finally {
-            setIsSendingBroadcast(false);
-            setBroadcastProgress(null);
-        }
+                    if (candidatosAlvo.length === 0) {
+                        alert('Nenhum candidato pendente encontrado!');
+                        setIsSendingBroadcast(false);
+                        setBroadcastProgress(null);
+                        return;
+                    }
+
+                    let successCount = 0;
+                    for (let i = 0; i < candidatosAlvo.length; i++) {
+                        const cand = candidatosAlvo[i];
+                        setBroadcastProgress(`Enviando ${i + 1} de ${candidatosAlvo.length}...`);
+
+                        try {
+                            const { error: fnError } = await supabase.functions.invoke('send-delayed-email', {
+                                body: { userEmail: cand.email, type: 'novas_vagas' }
+                            });
+                            if (!fnError) successCount++;
+                        } catch (e) {
+                            console.error(`Erro ao disparar para ${cand.email}:`, e);
+                        }
+                        await new Promise(res => setTimeout(res, 100));
+                    }
+
+                    alert(`🎯 Sucesso! ${successCount} e-mails enviados para incentivar a primeira candidatura.`);
+                    carregarAutomacao();
+                } catch (err) {
+                    console.error('Erro no disparo:', err);
+                    alert('Falha ao processar disparo.');
+                } finally {
+                    setIsSendingBroadcast(false);
+                    setBroadcastProgress(null);
+                }
+            }
+        });
     };
 
     const fetchRegistrationData = async () => {
@@ -1884,36 +1924,45 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
+                {/* ABA CONTRATAÇÕES */}
                 {activeTab === 'contratacoes' && (
-                    <div className="glass-panel animation-fade-in">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem', flexDirection: isMobile ? 'column' : 'row' }}>
-                            <div>
-                                <h2 style={{ color: 'var(--neon-blue)', margin: 0, fontSize: isMobile ? '1.2rem' : '1.8rem' }}>🏆 Mural de Conquistas</h2>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Relatório consolidado de contratações pelo sistema</p>
-                            </div>
-                            <div className="input-group" style={{ marginBottom: 0, width: isMobile ? '100%' : '300px' }}>
-                                <div style={{ position: 'relative' }}>
-                                    <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '14px' }} />
-                                    <input className="neon-input" style={{ paddingLeft: '38px', width: '100%' }} placeholder="Buscar nome ou empresa..." value={filtroContratado} onChange={e => setFiltroContratado(e.target.value)} />
-                                </div>
+                    <div className="glass-panel" style={{ padding: isMobile ? '10px' : '2rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+                            <h2 style={{ fontSize: isMobile ? '1.1rem' : '1.5rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <CheckCircle color="var(--norte-green)" size={isMobile ? 24 : 32} /> 
+                                {isMobile ? 'CONTRATAÇÕES' : 'CONTRATAÇÕES OFICIALIZADAS'}
+                            </h2>
+                            <div style={{ position: 'relative', width: isMobile ? '100%' : '300px' }}>
+                                <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                                <input 
+                                    className="neon-input" 
+                                    placeholder="Filtrar por Empresa..." 
+                                    style={{ paddingLeft: '40px', fontSize: '0.85rem' }} 
+                                    value={filtroContratado}
+                                    onChange={e => setFiltroContratado(e.target.value)}
+                                />
                             </div>
                         </div>
 
-                        {loading ? <p>Carregando contratações...</p> : (
-                            <div className="table-responsive">
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
-                                    <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                                        <tr>
-                                            <th style={{ padding: isMobile ? '10px' : '1rem' }}>Candidato</th>
-                                            <th style={{ padding: isMobile ? '10px' : '1rem' }}>Vaga / Empresa</th>
-                                            {!isMobile && <th style={{ padding: '1rem' }}>Data</th>}
-                                            {!isMobile && <th style={{ padding: '1rem' }}>Contato</th>}
-                                            <th style={{ padding: isMobile ? '10px' : '1rem' }}>Ações</th>
+                        {loading ? (
+                            <div style={{ textAlign: 'center', padding: '3rem' }}>
+                                <RefreshCw className="spin" size={32} />
+                                <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>Mapeando sucessos...</p>
+                            </div>
+                        ) : (
+                            <div style={{ overflowX: 'auto', margin: isMobile ? '0 -10px' : 0 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                    <thead>
+                                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>
+                                            <th style={{ padding: '1rem', fontWeight: 800 }}>Candidato</th>
+                                            <th style={{ padding: '1rem', fontWeight: 800 }}>Ocupação / Empresa</th>
+                                            {!isMobile && <th style={{ padding: '1rem', fontWeight: 800 }}>Data</th>}
+                                            {!isMobile && <th style={{ padding: '1rem', fontWeight: 800 }}>Contato</th>}
+                                            <th style={{ padding: '1rem', fontWeight: 800 }}>Ação</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {contratacoesList.filter(c => 
-                                            c.curriculos?.nome?.toLowerCase().includes(filtroContratado.toLowerCase()) || 
                                             c.vagas?.empresas?.razao_social?.toLowerCase().includes(filtroContratado.toLowerCase())
                                         ).map(c => (
                                             <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -1961,6 +2010,132 @@ export default function AdminDashboard() {
                                 </table>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* ABA FINANCEIRO (PRODUTO PREMIUM) */}
+                {activeTab === 'financeiro' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                        
+                        {/* WIDGETS DE FATURAMENTO */}
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '1.5rem' }}>
+                            <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--norte-green)' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '8px' }}>💰 FATURAMENTO (HOJE)</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--norte-green)' }}>
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financeiroStats.revenue.today)}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', marginTop: '10px', color: '#10b981', fontWeight: 700 }}>Em tempo real</div>
+                            </div>
+                            <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--neon-blue)' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '8px' }}>📅 FATURAMENTO (MÊS)</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 900, color: '#fff' }}>
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financeiroStats.revenue.month)}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', marginTop: '10px', color: 'var(--text-muted)' }}>Competência atual</div>
+                            </div>
+                            <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--norte-yellow)' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', marginBottom: '8px' }}>📈 RECEITA ACUMULADA</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--norte-yellow)' }}>
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(financeiroStats.revenue.total)}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', marginTop: '10px', color: 'var(--text-muted)' }}>Desde o início</div>
+                            </div>
+                        </div>
+
+                        {/* FUNIL DE VENDAS VISUAL */}
+                        <div className="glass-panel" style={{ padding: '2rem' }}>
+                            <h3 style={{ marginBottom: '2rem', fontSize: '1.2rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <TrendingUp color="var(--norte-green)" /> FUNIL DE VENDAS (SELO PREMIUM)
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', maxWidth: '800px', margin: '0 auto' }}>
+                                {[
+                                    { label: 'Usuários Cadastrados', val: financeiroStats.funnel.registered, color: 'rgba(255,255,255,0.1)', width: '100%', base: financeiroStats.funnel.registered },
+                                    { label: 'Criaram Currículo', val: financeiroStats.funnel.cv_created, color: 'rgba(56,189,248,0.2)', width: `${(financeiroStats.funnel.cv_created / financeiroStats.funnel.registered * 100) || 0}%`, icon: Building },
+                                    { label: 'Viram Oferta', val: financeiroStats.funnel.offer_viewed, color: 'rgba(251,191,36,0.2)', width: `${(financeiroStats.funnel.offer_viewed / financeiroStats.funnel.registered * 100) || 0}%`, icon: Search },
+                                    { label: 'Compraram (Selo Premium)', val: financeiroStats.funnel.purchased, color: 'rgba(16,185,129,0.3)', width: `${(financeiroStats.funnel.purchased / financeiroStats.funnel.registered * 100) || 0}%`, icon: DollarSign, isTarget: true }
+                                ].map((step, idx, arr) => (
+                                    <div key={idx} style={{ position: 'relative' }}>
+                                        <div style={{ 
+                                            background: step.color, 
+                                            width: isMobile ? '100%' : step.width, 
+                                            minWidth: '50px',
+                                            height: '60px', 
+                                            borderRadius: '8px', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'space-between', 
+                                            padding: '0 20px',
+                                            border: step.isTarget ? '2px solid var(--norte-green)' : '1px solid rgba(255,255,255,0.05)',
+                                            margin: '0 auto',
+                                            transition: 'all 0.5s ease'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                {step.icon && <step.icon size={18} color={step.isTarget ? 'var(--norte-green)' : '#fff'} />}
+                                                <span style={{ fontWeight: 800, fontSize: isMobile ? '0.8rem' : '0.95rem' }}>{step.label}</span>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ fontSize: '1.3rem', fontWeight: 900 }}>{step.val}</div>
+                                                {idx > 0 && (arr[idx-1].val > 0) && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                                    {((step.val / arr[idx-1].val) * 100).toFixed(1)}% de conversão
+                                                </div>}
+                                            </div>
+                                        </div>
+                                        {idx < arr.length - 1 && (
+                                            <div style={{ width: '2px', height: '15px', background: 'rgba(255,255,255,0.1)', margin: '0 auto' }}></div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* HISTÓRICO DE VENDAS */}
+                        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                            <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 800 }}>HISTÓRICO RECENTE DE VENDAS</h3>
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                    <thead style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <tr style={{ color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                                            <th style={{ padding: '12px' }}>Data/Hora</th>
+                                            <th style={{ padding: '12px' }}>Candidato</th>
+                                            <th style={{ padding: '12px' }}>Produto</th>
+                                            <th style={{ padding: '12px' }}>Valor</th>
+                                            <th style={{ padding: '12px' }}>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {financeiroStats.recentTransactions.map(tx => (
+                                            <tr key={tx.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem' }}>
+                                                <td style={{ padding: '12px', whiteSpace: 'nowrap' }}>
+                                                    {new Date(tx.created_at).toLocaleString('pt-BR')}
+                                                </td>
+                                                <td style={{ padding: '12px' }}>{tx.user_id?.substring(0,8)}...</td>
+                                                <td style={{ padding: '12px' }}>{tx.produto || 'Selo Premium'}</td>
+                                                <td style={{ padding: '12px', fontWeight: 700 }}>
+                                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(tx.valor)}
+                                                </td>
+                                                <td style={{ padding: '12px' }}>
+                                                    <span style={{ 
+                                                        background: tx.status === 'confirmado' ? 'rgba(16,185,129,0.1)' : 'rgba(251,191,36,0.1)', 
+                                                        color: tx.status === 'confirmado' ? '#10b981' : '#fbbf24', 
+                                                        padding: '4px 8px', 
+                                                        borderRadius: '6px', 
+                                                        fontSize: '0.75rem', 
+                                                        fontWeight: 800 
+                                                    }}>
+                                                        {tx.status?.toUpperCase()}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {financeiroStats.recentTransactions.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>Sem vendas registradas</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
@@ -2084,6 +2259,14 @@ export default function AdminDashboard() {
                     to { transform: translateY(0) scale(1); opacity: 1; }
                 }
             `}</style>
+            <ConfirmModal 
+                isOpen={confirmModal.isOpen} 
+                onClose={() => setConfirmModal(p => ({ ...p, isOpen: false }))}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                type={confirmModal.type}
+            />
         </div>
     );
 }

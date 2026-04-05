@@ -9,9 +9,9 @@ const AuthContext = createContext({});
 // ─────────────────────────────────────────────────────────────────
 const ROLE_CACHE_KEY = 'norte_user_role_cache';
 
-const saveRoleCache = (userId, role, pago) => {
+const saveRoleCache = (userId, role, pago, vip_vagas) => {
     try {
-        localStorage.setItem(ROLE_CACHE_KEY, JSON.stringify({ userId, role, pago, ts: Date.now() }));
+        localStorage.setItem(ROLE_CACHE_KEY, JSON.stringify({ userId, role, pago, vip_vagas, ts: Date.now() }));
     } catch (_) { /* Ignora erros de storage (modo privado etc.) */ }
 };
 
@@ -24,7 +24,7 @@ const loadRoleCache = (userId) => {
         // Cache válido por até 20 minutos — cobre instabilidade de rede de celular
         const TWENTY_MIN = 20 * 60 * 1000;
         if (cache.userId === userId && Date.now() - cache.ts < TWENTY_MIN) {
-            return { role: cache.role, pago: cache.pago };
+            return { role: cache.role, pago: cache.pago, vip_vagas: cache.vip_vagas };
         }
     } catch (_) { /* Ignora */ }
     return null;
@@ -52,7 +52,7 @@ const fetchWithRetry = async (userId, maxRetries = 3) => {
         try {
             const { data, error } = await supabase
                 .from('user_roles')
-                .select('role, pago')
+                .select('role, pago, vip_vagas')
                 .eq('user_id', userId)
                 .maybeSingle();
 
@@ -77,7 +77,8 @@ export const AuthProvider = ({ children }) => {
         user: null,
         role: null,
         loading: true,
-        pago: false
+        pago: false,
+        vip_vagas: false
     });
 
     const lastFetchedUserId = useRef(null);
@@ -96,7 +97,7 @@ export const AuthProvider = ({ children }) => {
 
             if (event === 'SIGNED_OUT') {
                 clearRoleCache();
-                setAuthState({ user: null, role: null, pago: false, loading: false });
+                setAuthState({ user: null, role: null, pago: false, vip_vagas: false, loading: false });
                 lastFetchedUserId.current = null;
                 isFetchingRole.current = false;
             } else if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') {
@@ -146,6 +147,7 @@ export const AuthProvider = ({ children }) => {
                 ...prev,
                 role: cached.role,
                 pago: cached.pago ?? false,
+                vip_vagas: cached.vip_vagas ?? false,
                 loading: false
             }));
             return;
@@ -162,25 +164,27 @@ export const AuthProvider = ({ children }) => {
             if (!mounted) return;
 
             if (!error && data) {
-                saveRoleCache(user.id, data.role, data.pago ?? false);
+                saveRoleCache(user.id, data.role, data.pago ?? false, data.vip_vagas ?? false);
                 setAuthState(prev => ({
                     ...prev,
                     role: data.role,
                     pago: data.pago ?? false,
+                    vip_vagas: data.vip_vagas ?? false,
                     loading: false
                 }));
             } else if (!error && !data) {
                 // Usuário autenticado mas sem role — fallback como candidato
-                saveRoleCache(user.id, 'candidato', false);
+                saveRoleCache(user.id, 'candidato', false, false);
                 setAuthState(prev => ({
                     ...prev,
                     role: 'candidato',
                     pago: false,
+                    vip_vagas: false,
                     loading: false
                 }));
             } else {
                 // Todas as tentativas falharam (rede muito ruim ou servidor fora)
-                setAuthState(prev => ({ ...prev, role: null, pago: false, loading: false }));
+                setAuthState(prev => ({ ...prev, role: null, pago: false, vip_vagas: false, loading: false }));
             }
 
             isFetchingRole.current = false;
@@ -208,20 +212,21 @@ export const AuthProvider = ({ children }) => {
         const { data, error } = await fetchWithRetry(user.id, 3);
 
         if (!error && data) {
-            saveRoleCache(user.id, data.role, data.pago ?? false);
+            saveRoleCache(user.id, data.role, data.pago ?? false, data.vip_vagas ?? false);
             setAuthState(prev => ({
                 ...prev,
                 role: data.role,
                 pago: data.pago ?? false,
+                vip_vagas: data.vip_vagas ?? false,
                 loading: false
             }));
             lastFetchedUserId.current = user.id;
         } else if (!error && !data) {
-            saveRoleCache(user.id, 'candidato', false);
-            setAuthState(prev => ({ ...prev, role: 'candidato', pago: false, loading: false }));
+            saveRoleCache(user.id, 'candidato', false, false);
+            setAuthState(prev => ({ ...prev, role: 'candidato', pago: false, vip_vagas: false, loading: false }));
             lastFetchedUserId.current = user.id;
         } else {
-            setAuthState(prev => ({ ...prev, role: null, pago: false, loading: false }));
+            setAuthState(prev => ({ ...prev, role: null, pago: false, vip_vagas: false, loading: false }));
         }
 
         isFetchingRole.current = false;

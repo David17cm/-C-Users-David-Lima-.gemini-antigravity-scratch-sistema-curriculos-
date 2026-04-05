@@ -59,7 +59,7 @@ export default function TermsPage() {
                             <li>Aplicar golpes de qualquer natureza contra outros usuários da plataforma.</li>
                             <li>Usar scripts automáticos, bots ou qualquer meio não humano para abusar dos serviços.</li>
                         </ul>
-                        <p style={{ marginTop: '0.75rem' }}>Violações a esta política resultarão em remoção imediata da conta e poderão ser reportadas às autoridades competentes. Para denunciar comportamento suspeito, entre em contato pelo e-mail: <b>suporte@norteempregos.com.br</b>.</p>
+                        <p style={{ marginTop: '0.75rem' }}>Violações a esta política resultarão em remoção imediata da conta e poderão ser reportadas às autoridades competentes. Para denunciar comportamento suspeito, entre em contato pelo e-mail: <b>suporte@nortevagas.online</b>.</p>
                     </section>
 
                     <section style={{ marginBottom: '1.5rem' }}>
