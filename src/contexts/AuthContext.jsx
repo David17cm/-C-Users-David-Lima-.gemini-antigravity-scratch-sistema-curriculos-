@@ -11,27 +11,30 @@ const ROLE_CACHE_KEY = 'norte_user_role_cache';
 
 const saveRoleCache = (userId, role, pago) => {
     try {
-        sessionStorage.setItem(ROLE_CACHE_KEY, JSON.stringify({ userId, role, pago, ts: Date.now() }));
+        localStorage.setItem(ROLE_CACHE_KEY, JSON.stringify({ userId, role, pago, ts: Date.now() }));
     } catch (_) { /* Ignora erros de storage (modo privado etc.) */ }
 };
 
+
 const loadRoleCache = (userId) => {
     try {
-        const raw = sessionStorage.getItem(ROLE_CACHE_KEY);
+        const raw = localStorage.getItem(ROLE_CACHE_KEY);
         if (!raw) return null;
         const cache = JSON.parse(raw);
-        // Cache válido por até 10 minutos — cobre instabilidade de rede de celular
-        const TEN_MIN = 10 * 60 * 1000;
-        if (cache.userId === userId && Date.now() - cache.ts < TEN_MIN) {
+        // Cache válido por até 20 minutos — cobre instabilidade de rede de celular
+        const TWENTY_MIN = 20 * 60 * 1000;
+        if (cache.userId === userId && Date.now() - cache.ts < TWENTY_MIN) {
             return { role: cache.role, pago: cache.pago };
         }
     } catch (_) { /* Ignora */ }
     return null;
 };
 
+
 const clearRoleCache = () => {
-    try { sessionStorage.removeItem(ROLE_CACHE_KEY); } catch (_) { /* Ignora */ }
+    try { localStorage.removeItem(ROLE_CACHE_KEY); } catch (_) { /* Ignora */ }
 };
+
 
 // ─────────────────────────────────────────────────────────────────
 // Retry com backoff exponencial (adaptado para Wi-Fi e 4G/5G)
@@ -110,6 +113,12 @@ export const AuthProvider = ({ children }) => {
                         loading: currentUser ? (currentUser.id !== lastFetchedUserId.current) : false
                     }));
                 }
+            } else if (event === 'PASSWORD_RECOVERY') {
+                // Durante a recuperação de senha, o Supabase nos loga automaticamente.
+                // Forçamos o redirecionamento para garantir que o usuário caia na página de Reset.
+                if (window.location.pathname !== '/reset-password') {
+                    window.location.href = `${window.location.origin}/reset-password${window.location.hash}`;
+                }
             }
         });
 
@@ -157,7 +166,7 @@ export const AuthProvider = ({ children }) => {
                 setAuthState(prev => ({
                     ...prev,
                     role: data.role,
-                    pago: data.pago ?? true,
+                    pago: data.pago ?? false,
                     loading: false
                 }));
             } else if (!error && !data) {
@@ -203,7 +212,7 @@ export const AuthProvider = ({ children }) => {
             setAuthState(prev => ({
                 ...prev,
                 role: data.role,
-                pago: data.pago ?? true,
+                pago: data.pago ?? false,
                 loading: false
             }));
             lastFetchedUserId.current = user.id;

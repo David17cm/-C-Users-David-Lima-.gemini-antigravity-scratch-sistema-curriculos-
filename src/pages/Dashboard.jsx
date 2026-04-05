@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
     User, Camera, BookOpen, Tag, GraduationCap, 
     Plus, Trash2, Briefcase, FileText, Brain, X, ChevronDown, ChevronUp, Award, Save, CheckCircle
@@ -39,6 +39,9 @@ function maskPhone(value) {
 }
 
 export default function Dashboard() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { user, pago, loading: authLoading, signOut } = useAuth();
     const [loading, setLoading] = useState(true);
     const [autoSaving, setAutoSaving] = useState(false);
     const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -50,9 +53,16 @@ export default function Dashboard() {
         escolaridade: true, formacao: true, cursos: true, experiencias: true, cnh: true
     });
 
-    const navigate = useNavigate();
-    const { user, signOut } = useAuth();
     const fileInputRef = useRef();
+
+    // ESCUTA CLIQUE NO BOTÃO TESTE DISC DO MENU
+    useEffect(() => {
+        if (location.state?.openDisc && !authLoading) {
+            setShowDiscQuiz(true);
+            // Limpa o state para permitir reabrir se clicar de novo
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state, authLoading]);
     const [formData, setFormData] = useState(EMPTY_FORM);
     const isInitialLoad = useRef(true);
     const saveTimeoutRef = useRef(null);
@@ -157,7 +167,7 @@ export default function Dashboard() {
             <CandidateNavbar subtitle={autoSaving ? 'Salvando...' : 'Salvo'} profilePhoto={formData.foto_url} />
 
             <div className="container" style={{ marginTop: '2rem', padding: '0 15px' }}>
-                <div style={{ marginBottom: '2rem' }}>
+                
                 <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--norte-dark-green)', margin: 0 }}>MANTENHA SEU PERFIL ATUALIZADO 🌿</h2>
                     <button 
@@ -168,6 +178,78 @@ export default function Dashboard() {
                         <FileText size={18} /> VISUALIZAR MEU CURRÍCULO 🚀
                     </button>
                 </div>
+
+                {/* BANNER PREMIUM (SE NÃO FOR PAGO) */}
+                {!pago && (
+                    <div className="premium-banner" style={{
+                        background: 'linear-gradient(135deg, #7c3aed 0%, #4338ca 100%)',
+                        borderRadius: '16px',
+                        padding: '1.5rem 2rem',
+                        marginBottom: '2rem',
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '1.5rem',
+                        boxShadow: '0 10px 25px -5px rgba(124, 58, 237, 0.4)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{ position: 'relative', zIndex: 2 }}>
+                            <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Award color="#fbbf24" fill="#fbbf24" size={28} /> SEJA UM CANDIDATO PREMIUM
+                            </h3>
+                            <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: '0.95rem', maxWidth: '500px' }}>
+                                Desbloqueie o **Selo de Perfil Verificado**, veja quem visitou seu currículo e tenha acesso a modelos exclusivos por apenas **R$ 7,90**.
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => window.open(`https://pay.cakto.com.br/fzowxw7_836819?refId=${user.id}`, '_blank')}
+                            className="neon-button" 
+                            style={{ 
+                                background: '#fff', 
+                                color: '#7c3aed', 
+                                width: 'auto', 
+                                margin: 0, 
+                                fontWeight: 900, 
+                                padding: '12px 30px', 
+                                boxShadow: '0 4px 15px rgba(255,255,255,0.3)',
+                                fontSize: '1rem'
+                            }}
+                        >
+                            QUERO SER PREMIUM 🚀
+                        </button>
+                        
+                        {/* Decoração de fundo */}
+                        <div style={{ position: 'absolute', right: '-20px', bottom: '-20px', opacity: 0.1 }}>
+                            <Award size={150} />
+                        </div>
+                    </div>
+                )}
+
+                {/* CHECKLIST DE MELHORIA */}
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid #10b981' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--norte-dark-green)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Brain size={20} color="#10b981" /> CHECKLIST DE MELHORIA DO CURRÍCULO 🧬
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                        {[
+                            { label: 'Foto de Perfil Profissional', met: !!formData.foto_url, tip: 'Aumenta 4x visualizações' },
+                            { label: 'Resumo Completo (>50 letras)', met: (formData.resumo?.length || 0) > 50, tip: 'Causa impacto inicial' },
+                            { label: 'Pelo menos 5 Habilidades', met: (formData.habilidades?.length || 0) >= 5, tip: 'Ajuda no filtro das empresas' },
+                            { label: 'Experiências Detalhadas', met: (formData.experiencias?.length || 0) > 0, tip: 'Mostra sua bagagem' },
+                            { label: 'Teste Comportamental DISC', met: !!formData.perfil_disc, tip: 'Essencial para RH' },
+                        ].map((item, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: item.met ? '#10b981' : '#64748b' }}>
+                                {item.met ? <CheckCircle size={16} /> : <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #cbd5e1' }} />}
+                                <div>
+                                    <strong style={{ display: 'block' }}>{item.label}</strong>
+                                    {!item.met && <span style={{ display: 'block', fontSize: '0.7rem', color: '#94a3b8' }}>Dica: {item.tip}</span>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Printer, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Printer, Image as ImageIcon, Award, Phone, Mail, MapPin, CheckCircle } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { useAuth } from '../contexts/AuthContext';
 import * as htmlToImage from 'html-to-image';
@@ -47,17 +47,19 @@ const parseJsonItem = (item, type = 'generic') => {
 
 export default function CVPreviewPage() {
     const { userId: paramId } = useParams();
+    const { user, role, loading: authLoading } = useAuth();
     const [cvData, setCvData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [scale, setScale] = useState(1);
     const navigate = useNavigate();
     const componentRef = useRef();
 
+    const a4WidthPx = 794; // Largura exata A4 em 96dpi
+    const a4HeightPx = 1123; // Altura exata A4 em 96dpi
+
     useEffect(() => {
         const calculateScale = () => {
-            const a4WidthPx = 794; // 210mm em 96dpi
-            const padding = 20;
-            const availableWidth = window.innerWidth - padding;
+            const availableWidth = window.innerWidth - 20; // Margem mínima de 10px de cada lado
             
             if (availableWidth < a4WidthPx) {
                 setScale(availableWidth / a4WidthPx);
@@ -70,7 +72,7 @@ export default function CVPreviewPage() {
         return () => window.removeEventListener('resize', calculateScale);
     }, []);
 
-    const { user, loading: authLoading } = useAuth();
+
 
     useEffect(() => {
         if (!authLoading) fetchData();
@@ -80,13 +82,55 @@ export default function CVPreviewPage() {
         const targetId = paramId || user?.id;
         if (!targetId) return;
         try {
-            const { data, error } = await supabase.from('curriculos').select('*').eq('user_id', targetId).single();
+            // Busca dados do currículo e status de pagamento (join)
+            const { data, error } = await supabase
+                .from('curriculos')
+                .select('*, user_roles(pago)')
+                .eq('user_id', targetId)
+                .single();
+
             if (error && error.code !== 'PGRST116') throw error;
-            setCvData(data);
+            
+            // Ajusta o objeto para incluir o status 'pago' facilitado
+            const processedData = data ? {
+                ...data,
+                pago: Array.isArray(data.user_roles) 
+                    ? data.user_roles[0]?.pago 
+                    : (data.user_roles?.pago || false)
+            } : null;
+
+            setCvData(processedData);
+
+            // LOG DE VISUALIZAÇÃO: Registra se o visualizador for empresa ou admin
+            if ((role === 'empresa' || role === 'admin') && targetId !== user?.id) {
+                registraVisualizacao(targetId);
+            }
         } catch (err) {
             console.error('Erro ao carregar CV:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const registraVisualizacao = async (candidatoId) => {
+        try {
+            // Tenta buscar o id da empresa para fins de relatório detalhado
+            const { data: empresa } = await supabase
+                .from('empresas')
+                .select('id')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            // Insere a visualização com o viewer_user_id (garante o log mesmo sem perfil completo)
+            await supabase
+                .from('candidate_views')
+                .insert({
+                    empresa_id: empresa?.id || null,
+                    candidato_id: candidatoId,
+                    viewer_user_id: user.id
+                });
+        } catch (e) {
+            console.error('Erro ao registrar visualização:', e);
         }
     };
 
@@ -114,16 +158,368 @@ export default function CVPreviewPage() {
         } catch (error) { console.error('Erro ao gerar PNG:', error); }
     };
 
-    if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '100px', color: 'var(--norte-green)', fontWeight: 800 }}>CARREGANDO SEU CURRICULO PROFISSIONAL...</div>;
-
     const s = {
         h2: { fontSize: '13pt', color: '#111', textTransform: 'uppercase', borderBottom: '2px solid #7c3aed', paddingBottom: '5px', marginBottom: '12px' },
         muted: { color: '#4b5563', fontSize: '9.5pt', fontWeight: 500 },
     };
 
+    if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '100px', color: 'var(--norte-green)', fontWeight: 800 }}>CARREGANDO SEU CURRICULO PROFISSIONAL...</div>;
+
+    const PREMIUM_COLORS = {
+        darkGreen: '#005b32',
+        lightGreen: '#f0fdf4',
+        accentGreen: '#dcfce7',
+        orange: '#f97316',
+        text: '#1a202c',
+        muted: '#4a5568'
+    };
+
+    const PremiumCVLayout = () => (
+        <div style={{ fontFamily: '"Inter", "Arial", sans-serif', color: PREMIUM_COLORS.text }}>
+            {/* 🔝 1. CABEÇALHO (TOP FIXO) */}
+            <div style={{ 
+                background: `linear-gradient(135deg, ${PREMIUM_COLORS.lightGreen} 0%, #ffffff 100%)`,
+                padding: '40px 50px',
+                borderBottom: `1px solid ${PREMIUM_COLORS.accentGreen}`,
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
+                {/* Logo e Nome da Plataforma */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '30px' }}>
+                    <div style={{ width: '40px', height: '40px', background: PREMIUM_COLORS.darkGreen, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: '1.2rem' }}>N</div>
+                    <span style={{ fontWeight: 800, color: PREMIUM_COLORS.darkGreen, fontSize: '1.1rem', letterSpacing: '0.5px' }}>NORTE VAGAS</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '35px' }}>
+                    {cvData.foto_url && (
+                        <div style={{ position: 'relative' }}>
+                            <img src={cvData.foto_url} alt="Foto" style={{ width: '140px', height: '140px', borderRadius: '50%', objectFit: 'cover', border: `4px solid #fff`, boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
+                        </div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                        <h1 style={{ fontSize: '28pt', fontWeight: 900, margin: '0 0 5px 0', color: PREMIUM_COLORS.darkGreen, textTransform: 'uppercase', letterSpacing: '-1px' }}>{cvData.nome}</h1>
+                        
+                        {/* Exibição do Cargo ou Perfil DISC */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '15px' }}>
+                            {cvData.cargo_desejado && <p style={{ fontSize: '16pt', fontWeight: 600, color: PREMIUM_COLORS.orange, margin: 0 }}>{cvData.cargo_desejado}</p>}
+                            {cvData.perfil_disc && (
+                                <p style={{ fontSize: '13pt', fontWeight: 700, color: PREMIUM_COLORS.darkGreen, margin: 0, opacity: 0.8 }}>
+                                    🎯 Perfil {(() => {
+                                        try {
+                                            const disc = typeof cvData.perfil_disc === 'string' ? JSON.parse(cvData.perfil_disc) : cvData.perfil_disc;
+                                            const sorted = Object.entries(disc).sort((a,b) => b[1] - a[1]);
+                                            return sorted[0][0];
+                                        } catch(e) { return cvData.perfil_disc; }
+                                    })()} — Predominante
+                                </p>
+                            )}
+                        </div>
+                        
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: PREMIUM_COLORS.accentGreen, padding: '6px 16px', borderRadius: '20px', color: PREMIUM_COLORS.darkGreen, fontWeight: 800, fontSize: '0.9rem' }}>
+                            <CheckCircle size={18} fill={PREMIUM_COLORS.darkGreen} color="#fff" /> Candidato Verificado
+                        </div>
+                    </div>
+                </div>
+
+                {/* Grafismo sutil no fundo */}
+                <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', background: PREMIUM_COLORS.accentGreen, borderRadius: '50%', opacity: 0.3, zIndex: 0 }} />
+            </div>
+
+            {/* 📞 2. LINHA DE CONTATO (IMPORTANTE) */}
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                gap: '20px', 
+                padding: '15px 50px', 
+                background: '#fff',
+                borderBottom: '1px solid #f1f5f9',
+                fontSize: '10.5pt',
+                color: PREMIUM_COLORS.muted,
+                fontWeight: 600
+            }}>
+                {cvData.telefone && <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Phone size={14} color={PREMIUM_COLORS.darkGreen} /> {cvData.telefone}</div>}
+                <div style={{ width: '1px', height: '14px', background: '#e2e8f0' }} />
+                {cvData.email && <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={14} color={PREMIUM_COLORS.darkGreen} /> {cvData.email}</div>}
+                <div style={{ width: '1px', height: '14px', background: '#e2e8f0' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={14} color={PREMIUM_COLORS.darkGreen} /> {cvData.cidade || 'Santarém'} - {cvData.bairro || 'PA'}</div>
+            </div>
+
+            {/* 📄 3. CORPO DO CURRÍCULO (ÚNICA COLUNA) */}
+            <div style={{ padding: '40px 50px' }}>
+                
+                {/* 🧠 RESUMO PROFISSIONAL */}
+                {cvData.resumo && (
+                    <div style={{ marginBottom: '35px' }}>
+                        <h3 style={{ color: PREMIUM_COLORS.orange, fontSize: '13pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px', borderBottom: `2px solid ${PREMIUM_COLORS.accentGreen}`, paddingBottom: '4px', display: 'inline-block' }}>🧠 Resumo Profissional</h3>
+                        <p style={{ fontSize: '11pt', lineHeight: 1.6, color: PREMIUM_COLORS.text, textAlign: 'justify' }}>{cvData.resumo}</p>
+                    </div>
+                )}
+
+                {/* 💼 EXPERIÊNCIA */}
+                {cvData.experiencias?.length > 0 && (
+                    <div style={{ marginBottom: '35px' }}>
+                        <h3 style={{ color: PREMIUM_COLORS.orange, fontSize: '13pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '18px', borderBottom: `2px solid ${PREMIUM_COLORS.accentGreen}`, paddingBottom: '4px', display: 'inline-block' }}>💼 Experiência</h3>
+                        {cvData.experiencias.map((exp, i) => (
+                            <div key={i} style={{ marginBottom: '22px', position: 'relative', paddingLeft: '20px', borderLeft: `2px solid ${PREMIUM_COLORS.accentGreen}` }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                                    <h4 style={{ fontSize: '12.5pt', fontWeight: 800, color: PREMIUM_COLORS.darkGreen, margin: 0 }}>{exp.empresa}</h4>
+                                    <span style={{ fontSize: '9pt', fontWeight: 700, color: PREMIUM_COLORS.muted }}>
+                                        {exp.mes_inicio}/{exp.ano_inicio} — {exp.atual ? 'Atualmente' : `${exp.mes_fim}/${exp.ano_fim}`}
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: '11pt', fontWeight: 700, color: PREMIUM_COLORS.text, marginBottom: '8px' }}>{exp.cargo}</div>
+                                {exp.atribuicoes && (
+                                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '10.5pt', color: PREMIUM_COLORS.muted, lineHeight: 1.5 }}>
+                                        {exp.atribuicoes.split('\n').map((line, idx) => (
+                                            <li key={idx} style={{ marginBottom: '4px' }}>{line.replace(/^[•\-\*]\s*/, '')}</li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* 🎓 FORMAÇÃO */}
+                {cvData.formacoes?.length > 0 && (
+                    <div style={{ marginBottom: '35px' }}>
+                        <h3 style={{ color: PREMIUM_COLORS.orange, fontSize: '13pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px', borderBottom: `2px solid ${PREMIUM_COLORS.accentGreen}`, paddingBottom: '4px', display: 'inline-block' }}>🎓 Formação</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: '15px' }}>
+                            {cvData.formacoes.map((f, i) => (
+                                <div key={i}>
+                                    <div style={{ fontWeight: 800, fontSize: '11.5pt', color: PREMIUM_COLORS.text }}>{f.curso}</div>
+                                    <div style={{ fontSize: '10pt', color: PREMIUM_COLORS.muted }}>{f.instituicao} • {f.status === 'completo' ? `Concluído em ${f.ano_conclusao}` : 'Em andamento'}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* 📚 CURSOS */}
+                {cvData.cursos_prof?.length > 0 && (
+                    <div style={{ marginBottom: '35px' }}>
+                        <h3 style={{ color: PREMIUM_COLORS.orange, fontSize: '13pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px', borderBottom: `2px solid ${PREMIUM_COLORS.accentGreen}`, paddingBottom: '4px', display: 'inline-block' }}>📚 Cursos</h3>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                            {cvData.cursos_prof.map((raw, i) => {
+                                const c = parseJsonItem(raw, 'curso');
+                                return (
+                                    <div key={i} style={{ padding: '8px 15px', background: PREMIUM_COLORS.lightGreen, border: `1px solid ${PREMIUM_COLORS.accentGreen}`, borderRadius: '6px', fontSize: '10pt' }}>
+                                        <div style={{ fontWeight: 700, color: PREMIUM_COLORS.darkGreen }}>{c.nome}</div>
+                                        <div style={{ fontSize: '8.5pt', color: PREMIUM_COLORS.muted }}>{c.instituicao}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* 🧠 HABILIDADES */}
+                {cvData.habilidades?.length > 0 && (
+                    <div style={{ marginBottom: '20px' }}>
+                        <h3 style={{ color: PREMIUM_COLORS.orange, fontSize: '13pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px', borderBottom: `2px solid ${PREMIUM_COLORS.accentGreen}`, paddingBottom: '4px', display: 'inline-block' }}>🧠 Habilidades</h3>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                            {cvData.habilidades.map(h => (
+                                <div key={h} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11pt', fontWeight: 600, color: PREMIUM_COLORS.text }}>
+                                    <div style={{ width: '6px', height: '6px', background: PREMIUM_COLORS.orange, borderRadius: '50%' }} /> {h}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer fixo para Premium */}
+            <div style={{ padding: '20px 50px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '8.5pt', color: '#94a3b8', background: '#fcfcfc' }}>
+                <span>Gerado por Norte Vagas</span>
+                <span style={{ fontWeight: 700 }}>nortevagas.com.br</span>
+            </div>
+        </div>
+    );
+
+    const StandardCVLayout = () => (
+        <>
+            {/* Header */}
+            <div style={{ borderBottom: '2.5px solid #1a202c', paddingBottom: '1.2rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '2rem' }}>
+                {cvData.foto_url && (
+                    <img src={cvData.foto_url} alt="Foto" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--norte-green)', flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1 }}>
+                    <h1 style={{ color: '#1a202c', margin: '0 0 12px 0', fontSize: '22pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.5px', lineHeight: 1.1, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {cvData.nome}
+                        {cvData.pago && (
+                            <Award size={24} color="#7c3aed" fill="#7c3aed" title="Candidato Verificado" />
+                        )}
+                    </h1>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px 30px', color: '#4a5568', fontSize: '10pt', fontWeight: 500, marginTop: '10px' }}>
+                        {cvData.data_nascimento && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '18px', textAlign: 'center' }}>🎂</span> 
+                                <span>{calcularIdade(cvData.data_nascimento)} anos</span>
+                            </div>
+                        )}
+                        {cvData.telefone && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '18px', textAlign: 'center' }}>📱</span> 
+                                <span>{cvData.telefone}</span>
+                            </div>
+                        )}
+                        {cvData.email && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', gridColumn: 'span 2' }}>
+                                <span style={{ width: '18px', textAlign: 'center' }}>✉</span> 
+                                <span>{cvData.email}</span>
+                            </div>
+                        )}
+                        {cvData.bairro && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', gridColumn: 'span 2' }}>
+                                <span style={{ width: '18px', textAlign: 'center' }}>📍</span> 
+                                <span>{cvData.bairro} — {cvData.cidade || 'PA'}</span>
+                            </div>
+                        )}
+                        {cvData.cnh?.possui && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '18px', textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
+                                    <CNHIcon size={16} />
+                                </span> 
+                                <span>CNH Categoria {cvData.cnh.categorias?.join('/') || 'Não inf.'}</span>
+                            </div>
+                        )}
+                        {cvData.possui_transporte && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '18px', textAlign: 'center' }}>🚗</span> 
+                                <span>Possui Veículo Próprio</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Perfil DISC (Sublime) */}
+            {cvData.perfil_disc && (
+                <div style={{ marginBottom: '20px', padding: '10px 15px', background: '#f8fafc', borderRadius: '8px', borderLeft: '4px solid var(--norte-green)' }}>
+                    <span style={{ fontSize: '9pt', fontWeight: 800, color: 'var(--norte-dark-green)', display: 'block', marginBottom: '2px' }}>PERFIL COMPORTAMENTAL (DISC)</span>
+                    {(() => {
+                        try {
+                            const disc = typeof cvData.perfil_disc === 'string' ? JSON.parse(cvData.perfil_disc) : cvData.perfil_disc;
+                            const sorted = Object.entries(disc).sort((a,b) => b[1] - a[1]);
+                            return <span style={{ fontSize: '11pt', fontWeight: 700, color: '#1a202c' }}>{sorted[0][0]} — Predominante</span>
+                        } catch(e) { return <span style={{ fontSize: '11pt', fontWeight: 700 }}>{cvData.perfil_disc}</span> }
+                    })()}
+                </div>
+            )}
+
+            {/* Competências (Logo abaixo do DISC) */}
+            {cvData.habilidades?.length > 0 && (
+                <div style={{ marginBottom: '25px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {cvData.habilidades.map(h => (
+                            <span key={h} style={{ background: '#fff', color: '#2d3748', padding: '6px 14px', borderRadius: '4px', fontSize: '10.5pt', fontWeight: 700, border: '1.2px solid #cbd5e1', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>{h}</span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Resumo */}
+            {cvData.resumo && (
+                <div style={{ marginBottom: '25px' }}>
+                    <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Resumo Profissional</h2>
+                    <p style={{ fontSize: '10.5pt', lineHeight: 1.55, color: '#2d3748', textAlign: 'justify' }}>{cvData.resumo}</p>
+                </div>
+            )}
+
+            {/* Escolaridade */}
+            {cvData.ensino_medio?.status && (
+                <div style={{ marginBottom: '25px' }}>
+                    <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Escolaridade</h2>
+                    <div style={{ fontSize: '11pt', color: '#2d3748' }}>
+                        {cvData.ensino_medio.status === 'cursando' && <span>Cursando {cvData.ensino_medio.ano_cursando}º Ano do Ensino Médio</span>}
+                        {cvData.ensino_medio.status === 'completo' && <span>Ensino Médio Completo — Concluído em {cvData.ensino_medio.ano_conclusao}</span>}
+                        {cvData.ensino_medio.status === 'incompleto' && <span>Ensino Médio Incompleto {cvData.ensino_medio.fundamental_completo ? '(Ensino Fundamental Completo)' : ''}</span>}
+                    </div>
+                </div>
+            )}
+
+            {/* Formação Superior */}
+            {cvData.formacoes?.length > 0 && (
+                <div style={{ marginBottom: '25px' }}>
+                    <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Formação Acadêmica</h2>
+                    {cvData.formacoes.map((f, i) => (
+                        <div key={i} style={{ marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '11pt', color: '#1a202c' }}>
+                                <span>{f.curso}</span>
+                                <span style={s.muted}>{f.status === 'completo' ? `Concluído em ${f.ano_conclusao}` : (f.status === 'cursando' ? 'Cursando' : 'Incompleto')}</span>
+                            </div>
+                            <div style={{ fontSize: '10.5pt', color: '#4a5568', fontStyle: 'italic' }}>{f.instituicao}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Experiência */}
+            {cvData.experiencias?.length > 0 && (
+                <div style={{ marginBottom: '25px' }}>
+                    <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Experiência Profissional</h2>
+                    {cvData.experiencias.map((exp, i) => (
+                        <div key={i} style={{ marginBottom: '18px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '11.5pt', color: '#1a202c' }}>
+                                <span>{exp.cargo}</span>
+                                <span style={s.muted}>
+                                    {(() => {
+                                        const formatarData = (mes, ano) => {
+                                            const m = parseInt(mes);
+                                            if (m >= 1 && m <= 12 && ano) return `${MESES_ABREV[m - 1]}/${ano}`;
+                                            return ano || '';
+                                        };
+
+                                        const inicio = formatarData(exp.mes_inicio, exp.ano_inicio);
+                                        const fim = exp.atual ? 'Atualmente' : formatarData(exp.mes_fim, exp.ano_fim);
+                                        
+                                        return inicio && fim ? `${inicio} — ${fim}` : (inicio || fim || '');
+                                    })()}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '11pt', color: '#4a5568', fontWeight: 700, marginBottom: '5px' }}>{exp.empresa}</div>
+                            {exp.atribuicoes && (
+                                <div style={{ fontSize: '10pt', color: '#2d3748', lineHeight: 1.45, paddingLeft: '10px', borderLeft: '2px solid #edf2f7' }}>
+                                    <strong>Principais atividades:</strong> {exp.atribuicoes}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Cursos */}
+            <div style={{ width: '100%' }}>
+                {cvData.cursos_prof?.length > 0 && (
+                    <div style={{ marginBottom: '25px' }}>
+                        <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Cursos</h2>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {cvData.cursos_prof.map((raw, i) => {
+                                const c = parseJsonItem(raw, 'curso');
+                                return (
+                                    <div key={i} style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ fontSize: '11.5pt', fontWeight: 700, color: '#1a202c' }}>{c.nome}</div>
+                                            <div style={{ fontSize: '9pt', fontWeight: 800, color: 'var(--norte-green)', textTransform: 'uppercase' }}>
+                                                {c.status === 'cursando' ? 'Cursando' : (c.status === 'completo' ? 'Concluído' : 'Incompleto')}
+                                            </div>
+                                        </div>
+                                        <div style={{ fontSize: '10pt', color: '#64748b', fontStyle: 'italic' }}>{c.instituicao}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
     return (
-        <div style={{ minHeight: '100vh', padding: '20px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#e2e8f0', backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
-            <div className="cv-actions-bar" style={{ width: '100%', maxWidth: '800px', display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', gap: '10px' }}>
+        <div style={{ minHeight: '100vh', padding: scale < 1 ? '10px 0' : '20px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#f1f5f9', position: 'relative' }}>
+            <div className="cv-actions-bar" style={{ width: '100%', maxWidth: '800px', display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', gap: '10px', zIndex: 100 }}>
                 <button onClick={() => navigate(-1)} className="neon-button secondary" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}>
                     <ArrowLeft size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '5px' }} /> VOLTAR
                 </button>
@@ -150,7 +546,10 @@ export default function CVPreviewPage() {
                     width: '100%', 
                     display: 'flex', 
                     justifyContent: 'center',
-                    padding: '20px 0'
+                    padding: scale < 1 ? '0' : '20px 0',
+                    height: scale < 1 ? `${(a4HeightPx * scale) + 60}px` : 'auto',
+                    overflow: 'visible',
+                    boxSizing: 'border-box'
                 }}>
                     <div 
                         className="cv-container" 
@@ -158,189 +557,21 @@ export default function CVPreviewPage() {
                         style={{ 
                             background: '#fff', 
                             color: '#333', 
-                            width: '210mm', 
-                            minHeight: '297mm', 
-                            padding: '25mm 20mm', 
-                            boxShadow: '0 20px 50px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)', 
+                            width: `${a4WidthPx}px`, 
+                            minHeight: `${a4HeightPx}px`, 
+                            padding: cvData.pago ? '0' : '60px 50px', 
+                            boxShadow: '0 25px 60px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)', 
                             boxSizing: 'border-box', 
                             transform: `scale(${scale})`, 
                             transformOrigin: 'top center', 
                             fontFamily: 'Arial, sans-serif',
-                            position: 'relative'
+                            position: 'relative',
+                            border: '1px solid #e2e8f0',
+                            flexShrink: 0,
+                            overflow: 'hidden'
                         }}
                     >
-                        
-                        {/* Header */}
-                        <div style={{ borderBottom: '2.5px solid #1a202c', paddingBottom: '1.2rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '2rem' }}>
-                            {cvData.foto_url && (
-                                <img src={cvData.foto_url} alt="Foto" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--norte-green)', flexShrink: 0 }} />
-                            )}
-                            <div style={{ flex: 1 }}>
-                                <h1 style={{ color: '#1a202c', margin: '0 0 12px 0', fontSize: '22pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.5px', lineHeight: 1.1 }}>{cvData.nome}</h1>
-                                
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px 20px', color: '#4a5568', fontSize: '9.5pt', fontWeight: 500 }}>
-                                    {cvData.data_nascimento && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ width: '18px', textAlign: 'center' }}>🎂</span> 
-                                            <span>{calcularIdade(cvData.data_nascimento)} anos</span>
-                                        </div>
-                                    )}
-                                    {cvData.telefone && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ width: '18px', textAlign: 'center' }}>📱</span> 
-                                            <span>{cvData.telefone}</span>
-                                        </div>
-                                    )}
-                                    {cvData.email && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', gridColumn: 'span 2' }}>
-                                            <span style={{ width: '18px', textAlign: 'center' }}>✉</span> 
-                                            <span>{cvData.email}</span>
-                                        </div>
-                                    )}
-                                    {cvData.bairro && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', gridColumn: 'span 2' }}>
-                                            <span style={{ width: '18px', textAlign: 'center' }}>📍</span> 
-                                            <span>{cvData.bairro} — {cvData.cidade || 'PA'}</span>
-                                        </div>
-                                    )}
-                                    {cvData.cnh?.possui && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ width: '18px', textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
-                                                <CNHIcon size={16} />
-                                            </span> 
-                                            <span>CNH Categoria {cvData.cnh.categorias?.join('/') || 'Não inf.'}</span>
-                                        </div>
-                                    )}
-                                    {cvData.possui_transporte && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ width: '18px', textAlign: 'center' }}>🚗</span> 
-                                            <span>Possui Veículo Próprio</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Perfil DISC (Sublime) */}
-                        {cvData.perfil_disc && (
-                            <div style={{ marginBottom: '20px', padding: '10px 15px', background: '#f8fafc', borderRadius: '8px', borderLeft: '4px solid var(--norte-green)' }}>
-                                <span style={{ fontSize: '9pt', fontWeight: 800, color: 'var(--norte-dark-green)', display: 'block', marginBottom: '2px' }}>PERFIL COMPORTAMENTAL (DISC)</span>
-                                {(() => {
-                                    try {
-                                        const disc = typeof cvData.perfil_disc === 'string' ? JSON.parse(cvData.perfil_disc) : cvData.perfil_disc;
-                                        const sorted = Object.entries(disc).sort((a,b) => b[1] - a[1]);
-                                        return <span style={{ fontSize: '11pt', fontWeight: 700, color: '#1a202c' }}>{sorted[0][0]} — Predominante</span>
-                                    } catch(e) { return <span style={{ fontSize: '11pt', fontWeight: 700 }}>{cvData.perfil_disc}</span> }
-                                })()}
-                            </div>
-                        )}
-
-                        {/* Competências (Logo abaixo do DISC) */}
-                        {cvData.habilidades?.length > 0 && (
-                            <div style={{ marginBottom: '25px' }}>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {cvData.habilidades.map(h => (
-                                        <span key={h} style={{ background: '#f1f5f9', color: '#1a202c', padding: '5px 12px', borderRadius: '6px', fontSize: '10pt', fontWeight: 700, border: '1.5px solid #e2e8f0' }}>{h}</span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Resumo */}
-                        {cvData.resumo && (
-                            <div style={{ marginBottom: '25px' }}>
-                                <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Resumo Profissional</h2>
-                                <p style={{ fontSize: '10.5pt', lineHeight: 1.55, color: '#2d3748', textAlign: 'justify' }}>{cvData.resumo}</p>
-                            </div>
-                        )}
-
-                        {/* Escolaridade */}
-                        {cvData.ensino_medio?.status && (
-                            <div style={{ marginBottom: '25px' }}>
-                                <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Escolaridade</h2>
-                                <div style={{ fontSize: '11pt', color: '#2d3748' }}>
-                                    {cvData.ensino_medio.status === 'cursando' && <span>Cursando {cvData.ensino_medio.ano_cursando}º Ano do Ensino Médio</span>}
-                                    {cvData.ensino_medio.status === 'completo' && <span>Ensino Médio Completo — Concluído em {cvData.ensino_medio.ano_conclusao}</span>}
-                                    {cvData.ensino_medio.status === 'incompleto' && <span>Ensino Médio Incompleto {cvData.ensino_medio.fundamental_completo ? '(Ensino Fundamental Completo)' : ''}</span>}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Formação Superior */}
-                        {cvData.formacoes?.length > 0 && (
-                            <div style={{ marginBottom: '25px' }}>
-                                <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Formação Acadêmica</h2>
-                                {cvData.formacoes.map((f, i) => (
-                                    <div key={i} style={{ marginBottom: '10px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '11pt', color: '#1a202c' }}>
-                                            <span>{f.curso}</span>
-                                            <span style={s.muted}>{f.status === 'completo' ? `Concluído em ${f.ano_conclusao}` : (f.status === 'cursando' ? 'Cursando' : 'Incompleto')}</span>
-                                        </div>
-                                        <div style={{ fontSize: '10.5pt', color: '#4a5568', fontStyle: 'italic' }}>{f.instituicao}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Experiência */}
-                        {cvData.experiencias?.length > 0 && (
-                            <div style={{ marginBottom: '25px' }}>
-                                <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Experiência Profissional</h2>
-                                {cvData.experiencias.map((exp, i) => (
-                                    <div key={i} style={{ marginBottom: '18px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '11.5pt', color: '#1a202c' }}>
-                                            <span>{exp.cargo}</span>
-                                            <span style={s.muted}>
-                                                {(() => {
-                                                    const formatarData = (mes, ano) => {
-                                                        const m = parseInt(mes);
-                                                        if (m >= 1 && m <= 12 && ano) return `${MESES_ABREV[m - 1]}/${ano}`;
-                                                        return ano || '';
-                                                    };
-
-                                                    const inicio = formatarData(exp.mes_inicio, exp.ano_inicio);
-                                                    const fim = exp.atual ? 'Atualmente' : formatarData(exp.mes_fim, exp.ano_fim);
-                                                    
-                                                    return inicio && fim ? `${inicio} — ${fim}` : (inicio || fim || '');
-                                                })()}
-                                            </span>
-                                        </div>
-                                        <div style={{ fontSize: '11pt', color: '#4a5568', fontWeight: 700, marginBottom: '5px' }}>{exp.empresa}</div>
-                                        {exp.atribuicoes && (
-                                            <div style={{ fontSize: '10pt', color: '#2d3748', lineHeight: 1.45, paddingLeft: '10px', borderLeft: '2px solid #edf2f7' }}>
-                                                <strong>Principais atividades:</strong> {exp.atribuicoes}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Cursos */}
-                        <div style={{ width: '100%' }}>
-                            {cvData.cursos_prof?.length > 0 && (
-                                <div style={{ marginBottom: '25px' }}>
-                                    <h2 style={{ fontSize: '13pt', color: '#1a202c', textTransform: 'uppercase', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '10px', fontWeight: 800 }}>Cursos</h2>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {cvData.cursos_prof.map((raw, i) => {
-                                            const c = parseJsonItem(raw, 'curso');
-                                            return (
-                                                <div key={i} style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <div style={{ fontSize: '11.5pt', fontWeight: 700, color: '#1a202c' }}>{c.nome}</div>
-                                                        <div style={{ fontSize: '9pt', fontWeight: 800, color: 'var(--norte-green)', textTransform: 'uppercase' }}>
-                                                            {c.status === 'cursando' ? 'Cursando' : (c.status === 'completo' ? 'Concluído' : 'Incompleto')}
-                                                        </div>
-                                                    </div>
-                                                    <div style={{ fontSize: '10pt', color: '#64748b', fontStyle: 'italic' }}>{c.instituicao}</div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
+                        {cvData.pago ? <PremiumCVLayout /> : <StandardCVLayout />}
                     </div>
                 </div>
             )}

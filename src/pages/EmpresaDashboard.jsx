@@ -10,6 +10,7 @@ import {
     Flame, Thermometer, Sun, Wind, Snowflake, MessageSquare, Star
 } from 'lucide-react';
 import { TODOS_OS_CURSOS } from '../data/cursos';
+import { AREAS_FORMACAO, MAPA_RELACIONAMENTOS, ESTRUTURA_ACADEMICA } from '../data/formacaoData';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import Navbar from '../components/layout/Navbar';
 import BrandLogo from '../components/layout/BrandLogo';
@@ -207,7 +208,10 @@ export default function EmpresaDashboard() {
         quantidade: 1,
         requisitos_obrigatorios: [],
         requisitos_desejaveis: [],
-        preferencia_genero: 'todos'
+        preferencia_genero: 'todos',
+        ensino_superior_status: 'nenhum',
+        area_formacao: '',
+        curso_superior: ''
     });
     const [vagas, setVagas] = useState([]);
 
@@ -220,6 +224,7 @@ export default function EmpresaDashboard() {
         cursos: ['', '', ''], 
         ensinoMedio: '',       // '', 'completo', 'cursando', 'incompleto'
         ensinoSuperior: '',    // '', 'completo', 'cursando'
+        areaFormacao: '',      // Novo: Área de Formação (ex: "Engenharia e Arquitetura")
         cursoSuperior: '',     // texto livre (nome do curso)
         perfilDisc: '',        // '', 'D', 'I', 'S', 'C'
         cidade: '', 
@@ -264,6 +269,7 @@ export default function EmpresaDashboard() {
     const [loadingCandidatos, setLoadingCandidatos] = useState(false);
     const [vagaToClose, setVagaToClose] = useState(null);
     const [notification, setNotification] = useState(null);
+    const [filtroStatusModal, setFiltroStatusModal] = useState('todos');
 
     // Helper para mostrar notificações
     const notify = (message, type = 'success') => {
@@ -406,7 +412,7 @@ export default function EmpresaDashboard() {
     const resetFiltros = () => {
         setFiltros({ 
             nome: '', idadeMin: '', idadeMax: '', cursos: ['', '', ''], 
-            ensinoMedio: '', ensinoSuperior: '', cursoSuperior: '', 
+            ensinoMedio: '', ensinoSuperior: '', areaFormacao: '', cursoSuperior: '', 
             perfilDisc: '', cidade: '', habilidade: '', statusCurriculo: 'todos', 
             genero: '', perfilReferencia: '', palavrasChave: '',
             possuiTransporte: '', cnhCat: ''
@@ -838,7 +844,10 @@ export default function EmpresaDashboard() {
             salario_max: newVaga.salario_max || null,
             data_limite: newVaga.data_limite || null,
             quantidade: parseInt(newVaga.quantidade) || 1,
-            preferencia_genero: newVaga.preferencia_genero || 'todos'
+            preferencia_genero: newVaga.preferencia_genero || 'todos',
+            ensino_superior_status: newVaga.ensino_superior_status || 'nenhum',
+            area_formacao: newVaga.area_formacao || '',
+            curso_superior: newVaga.curso_superior || ''
         };
 
         try {
@@ -874,7 +883,10 @@ export default function EmpresaDashboard() {
                 data_limite: '', 
                 quantidade: 1,
                 requisitos_obrigatorios: [],
-                requisitos_desejaveis: []
+                requisitos_desejaveis: [],
+                ensino_superior_status: 'nenhum',
+                area_formacao: '',
+                curso_superior: ''
             });
             fetchVagas(empresa.id);
         } catch (err) {
@@ -896,7 +908,10 @@ export default function EmpresaDashboard() {
             quantidade: vaga.quantidade || 1,
             requisitos_obrigatorios: Array.isArray(vaga.requisitos_obrigatorios) ? vaga.requisitos_obrigatorios : [],
             requisitos_desejaveis: Array.isArray(vaga.requisitos_desejaveis) ? vaga.requisitos_desejaveis : [],
-            preferencia_genero: vaga.preferencia_genero || 'todos'
+            preferencia_genero: vaga.preferencia_genero || 'todos',
+            ensino_superior_status: vaga.ensino_superior_status || 'nenhum',
+            area_formacao: vaga.area_formacao || '',
+            curso_superior: vaga.curso_superior || ''
         });
         setShowVagaForm(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -944,8 +959,19 @@ export default function EmpresaDashboard() {
                 mergedCandidatos = cands.map(cand => {
                     const cv = cvs?.find(cv => cv.user_id === cand.user_id) || null;
                     let score = 0;
+                    let score_breakdown = [];
                     
                     if (cv && vaga) {
+                        const obrigatorios = Array.isArray(vaga.requisitos_obrigatorios) ? vaga.requisitos_obrigatorios : [];
+                        const desejaveis = Array.isArray(vaga.requisitos_desejaveis) ? vaga.requisitos_desejaveis : [];
+                        let maxPoints = (obrigatorios.length * 10) + (desejaveis.length * 5);
+                        let matchInternal = 0;
+                        
+                        const exigeSuperior = vaga.ensino_superior_status && vaga.ensino_superior_status !== 'nenhum';
+                        if (exigeSuperior) {
+                            maxPoints += 15; // Lógica da Fase 3: Aumenta o peso se for exigido superior
+                        }
+
                         // 1. CHECAGEM DE GÊNERO (Critério de desempate/filtro)
                         let matchingGenero = true;
                         if (vaga.preferencia_genero && vaga.preferencia_genero !== 'todos') {
@@ -954,39 +980,84 @@ export default function EmpresaDashboard() {
                             }
                         }
 
-                        const obrigatorios = Array.isArray(vaga.requisitos_obrigatorios) ? vaga.requisitos_obrigatorios : [];
-                        const desejaveis = Array.isArray(vaga.requisitos_desejaveis) ? vaga.requisitos_desejaveis : [];
+                        const cvHab = (cv.habilidades || []).map(h => normalizarTexto(h));
+                        const cvResumo = normalizarTexto(cv.resumo || '');
+                        const cvExps = (cv.experiencias || []).map(exp => 
+                            normalizarTexto(`${exp.cargo} ${exp.atribuicoes || exp.descricao || ''}`)
+                        );
+                        const cvForms = (cv.formacoes || []).map(f => normalizarTexto(`${f.curso} ${f.instituicao || ''}`));
+                        const cvCompletoTextos = [...cvExps, ...cvForms];
                         
-                        let matchInternal = 0;
-                        let maxPoints = (obrigatorios.length * 10) + (desejaveis.length * 5);
+                        obrigatorios.forEach(req => {
+                            const r = normalizarTexto(req);
+                            const hasMatch = cvHab.some(h => h.includes(r)) || cvResumo.includes(r) || cvCompletoTextos.some(e => e.includes(r));
+                            score_breakdown.push(`${hasMatch ? '✅' : '⏳'} [Obrigatório] ${req} (+10)`);
+                            if (hasMatch) matchInternal += 10;
+                        });
                         
-                        if (maxPoints > 0) {
-                            const cvHab = (cv.habilidades || []).map(h => normalizarTexto(h));
-                            const cvResumo = normalizarTexto(cv.resumo || '');
-                            const cvExps = (cv.experiencias || []).map(exp => 
-                                normalizarTexto(`${exp.cargo} ${exp.atribuicoes || exp.descricao || ''}`)
-                            );
-                            
-                            obrigatorios.forEach(req => {
-                                const r = normalizarTexto(req);
-                                const matchNasExps = cvExps.some(e => e.includes(r));
-                                if (cvHab.some(h => h.includes(r)) || cvResumo.includes(r) || matchNasExps) {
-                                    matchInternal += 10;
+                        desejaveis.forEach(req => {
+                            const r = normalizarTexto(req);
+                            const hasMatch = cvHab.some(h => h.includes(r)) || cvResumo.includes(r) || cvCompletoTextos.some(e => e.includes(r));
+                            score_breakdown.push(`${hasMatch ? '✅' : '⏳'} [Desejável] ${req} (+5)`);
+                            if (hasMatch) matchInternal += 5;
+                        });
+
+                        if (cvResumo) score_breakdown.push('🗓️ Ativo no Mercado (+5%)');
+                        
+                        // --- MATCHING INTELIGENTE DE FORMAÇÃO NA VAGA ---
+                        if (exigeSuperior) {
+                            const formacoes = cv.formacoes || [];
+                            let bestMatchScore = 0;
+                            let bestMatchReason = '';
+
+                            const temFiltroArea = !!vaga.area_formacao;
+                            const temFiltroNome = !!vaga.curso_superior;
+
+                            const cursosDaArea = temFiltroArea && ESTRUTURA_ACADEMICA[vaga.area_formacao] ? ESTRUTURA_ACADEMICA[vaga.area_formacao].map(normalizarTexto) : [];
+                            const tecnicosRelacionados = temFiltroArea && MAPA_RELACIONAMENTOS[vaga.area_formacao] ? MAPA_RELACIONAMENTOS[vaga.area_formacao].map(normalizarTexto) : [];
+
+                            formacoes.forEach(f => {
+                                if (vaga.ensino_superior_status === 'completo' && f.status !== 'completo') return;
+
+                                const cursoNorm = normalizarTexto(f.curso || '');
+                                let currentScore = 0;
+                                let currentReason = '';
+
+                                const isExactMatch = temFiltroNome && cursoNorm === normalizarTexto(vaga.curso_superior);
+                                const isAreaMatch = temFiltroArea && cursosDaArea.some(c => cursoNorm.includes(c) || c.includes(cursoNorm));
+                                const isTechMatch = temFiltroArea && tecnicosRelacionados.some(c => cursoNorm.includes(c) || c.includes(cursoNorm));
+                                const isApproxMatch = temFiltroNome && cursoNorm.includes(normalizarTexto(vaga.curso_superior));
+
+                                if (isExactMatch) { currentScore = 15; currentReason = 'Formação Exata'; }
+                                else if (isAreaMatch) { currentScore = 15 * 0.85; currentReason = 'Mesma Área'; }
+                                else if (isTechMatch) { currentScore = 15 * 0.70; currentReason = 'Formação Relacionada'; }
+                                else if (isApproxMatch) { currentScore = 15 * 0.50; currentReason = 'Match Aproximado'; }
+
+                                if (currentScore > bestMatchScore) {
+                                    bestMatchScore = currentScore;
+                                    bestMatchReason = currentReason;
                                 }
                             });
-                            
-                            desejaveis.forEach(req => {
-                                const r = normalizarTexto(req);
-                                const matchNasExps = cvExps.some(e => e.includes(r));
-                                if (cvHab.some(h => h.includes(r)) || cvResumo.includes(r) || matchNasExps) {
-                                    matchInternal += 5;
-                                }
-                            });
-                            
-                            score = Math.round((matchInternal / maxPoints) * 100);
+
+                            if (bestMatchScore > 0) {
+                                matchInternal += bestMatchScore;
+                                score_breakdown.push(`⭐ Educação: ${bestMatchReason} (+${bestMatchScore.toFixed(1)} pts)`);
+                            } else {
+                                score_breakdown.push(`⏳ Educação: Ausente ou Incompatível`);
+                            }
                         } else {
-                            score = 20; // Score base se não houver requisitos, mas houver inscrição
+                            // CASO 2 Bônus (Anti-Viés): Vaga não exige, mas candidato pontuou por KW
+                            const temKeyword = obrigatorios.some(req => cvCompletoTextos.some(e => e.includes(normalizarTexto(req)))) || 
+                                              desejaveis.some(req => cvCompletoTextos.some(e => e.includes(normalizarTexto(req))));
+                            if (temKeyword && Array.isArray(cv.formacoes) && cv.formacoes.length > 0) {
+                                matchInternal += 7.5; // bônus injetado
+                                score_breakdown.push(`⭐ Formação Relevante (Bônus +7.5)`);
+                            }
                         }
+
+                        // Cálculo Final Vagas
+                        score = maxPoints > 0 ? Math.round((matchInternal / maxPoints) * 100) : 20;
+                        if (score > 100) score = 100;
 
                         // Penalidade se não bater o gênero preferido
                         if (!matchingGenero) {
@@ -997,7 +1068,8 @@ export default function EmpresaDashboard() {
                     return {
                         ...cand,
                         curriculos: cv,
-                        score_afinidade: score
+                        score_afinidade: score,
+                        score_breakdown
                     };
                 });
 
@@ -1056,11 +1128,11 @@ export default function EmpresaDashboard() {
     const talentosComMatch = useMemo(() => {
         // 1. Definição de Pesos Base
         const PESOS_BASE = {
-            experiencia: 40,
-            habilidades: 25,
+            experiencia: 35,
+            habilidades: 20,
             disc: 20,
             localizacao: 10,
-            extra: 5
+            extra: 15
         };
 
         const processados = talentos.map(t => {
@@ -1070,21 +1142,43 @@ export default function EmpresaDashboard() {
             let totalActiveWeight = 0;
             let totalEarnedPoints = 0;
 
+            let matchBreakdown = [];
+
             // --- CATEGORIA 1: EXPERIÊNCIA (40 pts) ---
             const kwSet = filtros.palavrasChave ? filtros.palavrasChave.split(',').map(s => normalizarTexto(s.trim())).filter(s => s.length > 0) : [];
             if (kwSet.length > 0) {
                 totalActiveWeight += PESOS_BASE.experiencia;
                 
-                // Analisa todas as descrições de experiências
+                // Analisa todas as descrições de experiências e FORMAÇÕES (Fase 3: Expansão Lexical)
                 const textoExperiencia = (t.experiencias || []).map(exp => 
                     normalizarTexto(`${exp.cargo} ${exp.atribuicoes || exp.descricao || ''}`)
                 ).join(' ');
-
-                let matches = 0;
-                kwSet.forEach(kw => { if (textoExperiencia.includes(kw)) matches++; });
                 
-                const expScore = (matches / kwSet.length) * PESOS_BASE.experiencia;
+                const textoFormacao = (t.formacoes || []).map(f => 
+                    normalizarTexto(`${f.curso} ${f.instituicao || ''}`)
+                ).join(' ');
+
+                const textoCompletoPesquisa = textoExperiencia + ' ' + textoFormacao;
+
+                let matchesCount = 0;
+                let matchedKws = [];
+                kwSet.forEach(kw => { 
+                    if (textoCompletoPesquisa.includes(kw)) {
+                        matchesCount++;
+                        matchedKws.push(kw);
+                    }
+                });
+                
+                t._matchedKws = matchedKws;
+                
+                const expScore = (matchesCount / kwSet.length) * PESOS_BASE.experiencia;
                 totalEarnedPoints += expScore;
+                
+                if (matchesCount > 0) {
+                    matchBreakdown.push(`✅ Experiência: ${matchedKws.length}/${kwSet.length} termos encontrados (+${Math.round(expScore)} pts)`);
+                } else {
+                    matchBreakdown.push(`⏳ Experiência: Nenhum termo chave encontrado`);
+                }
             }
 
             // --- CATEGORIA 2: HABILIDADES E CURSOS (25 pts) ---
@@ -1100,11 +1194,13 @@ export default function EmpresaDashboard() {
                     const skillsBuscadas = filtros.habilidade.split(',').map(s => normalizarTexto(s.trim())).filter(s => s !== '');
                     if (skillsBuscadas.length > 0) {
                         const habCandidato = (t.habilidades || []).map(h => normalizarTexto(h));
-                        let matches = 0;
+                        let matchesHab = 0;
                         skillsBuscadas.forEach(sb => {
-                            if (habCandidato.some(hc => hc.includes(sb))) matches++;
+                            if (habCandidato.some(hc => hc.includes(sb))) matchesHab++;
                         });
-                        habPoints += (matches / skillsBuscadas.length) * 15;
+                        const p = (matchesHab / skillsBuscadas.length) * 15;
+                        habPoints += p;
+                        if (matchesHab > 0) matchBreakdown.push(`✅ Habilidades: ${matchesHab}/${skillsBuscadas.length} compatíveis (+${Math.round(p)} pts)`);
                     }
                 }
 
@@ -1112,7 +1208,9 @@ export default function EmpresaDashboard() {
                 if (cursosAtivos.length > 0) {
                     let cursoMatches = 0;
                     cursosAtivos.forEach(c => { if ((t.cursos_prof || []).includes(c)) cursoMatches++; });
-                    habPoints += (cursoMatches / cursosAtivos.length) * 10;
+                    const p = (cursoMatches / cursosAtivos.length) * 10;
+                    habPoints += p;
+                    if (cursoMatches > 0) matchBreakdown.push(`✅ Cursos: ${cursoMatches}/${cursosAtivos.length} encontrados (+${Math.round(p)} pts)`);
                 }
 
                 totalEarnedPoints += Math.min(habPoints, PESOS_BASE.habilidades);
@@ -1124,6 +1222,9 @@ export default function EmpresaDashboard() {
                 const dominante = getDiscDominante(t.perfil_disc);
                 if (dominante === filtros.perfilDisc) {
                     totalEarnedPoints += PESOS_BASE.disc;
+                    matchBreakdown.push(`🎯 Perfil DISC: Dominante ${dominante} (+20 pts)`);
+                } else {
+                    matchBreakdown.push(`⏳ Perfil DISC: Diferente do desejado`);
                 }
             }
 
@@ -1132,50 +1233,103 @@ export default function EmpresaDashboard() {
                 totalActiveWeight += PESOS_BASE.localizacao;
                 if (normalizarTexto(t.cidade).includes(normalizarTexto(filtros.cidade))) {
                     totalEarnedPoints += PESOS_BASE.localizacao;
+                    matchBreakdown.push(`📍 Localização: Candidato residente em ${t.cidade || 'cidade próxima'} (+10 pts)`);
+                } else {
+                    matchBreakdown.push(`⏳ Localização: Candidato de outra região`);
                 }
             }
 
-            // --- CATEGORIA 5: EXTRA / FORMAÇÃO (5 pts) ---
-            const temFiltroSuperiorStatus = !!filtros.ensinoSuperior;
+            // --- CATEGORIA 5: EXTRA / FORMAÇÃO (Anti-Viés) ---
+            const temFiltroSuperiorStatus = !!filtros.ensinoSuperior && filtros.ensinoSuperior !== 'nenhum';
             const temFiltroSuperiorNome = !!filtros.cursoSuperior;
+            const temFiltroArea = !!filtros.areaFormacao;
             const temFiltroMedio = !!filtros.ensinoMedio;
             const temFiltroCompleto = filtros.statusCurriculo === 'completo';
 
-            if (temFiltroSuperiorStatus || temFiltroSuperiorNome || temFiltroMedio || temFiltroCompleto) {
-                totalActiveWeight += PESOS_BASE.extra;
-                let extraPoints = 0;
+            const exigeSuperior = temFiltroSuperiorStatus || temFiltroSuperiorNome || temFiltroArea;
+            const limitePontuacaoExtra = exigeSuperior ? PESOS_BASE.extra : (PESOS_BASE.extra / 2); // 15 ou 7.5
+            
+            // Ativa o peso de educação no TotalActiveWeight
+            if (exigeSuperior) {
+                totalActiveWeight += PESOS_BASE.extra; // +15
+            } else if (temFiltroMedio || temFiltroCompleto || filtros.ensinoSuperior === 'nenhum') {
+                totalActiveWeight += 5; // Peso menor para compensar
+            }
 
-                // Ensino Médio (Peso 2)
-                if (temFiltroMedio && t.ensino_medio?.status === filtros.ensinoMedio) extraPoints += 2.5;
+            let extraPoints = 0;
+            let extraDetails = [];
 
-                // Ensino Superior (Peso 2)
-                if (temFiltroSuperiorStatus || temFiltroSuperiorNome) {
-                    const formacoes = t.formacoes || [];
-                    
-                    if (filtros.ensinoSuperior === 'nenhum') {
-                        // "Nenhum" só pontua se não houver formações
-                        if (formacoes.length === 0) extraPoints += 2.5;
-                    } else {
-                        // Busca por status ou nome do curso
-                        const matchSuperior = formacoes.some(f => {
-                            const matchStatus = !filtros.ensinoSuperior || f.status === filtros.ensinoSuperior;
-                            const matchNome = !filtros.cursoSuperior || normalizarTexto(f.curso).includes(normalizarTexto(filtros.cursoSuperior));
-                            return matchStatus && matchNome;
-                        });
-                        if (matchSuperior) extraPoints += 2.5;
+            if (temFiltroMedio && t.ensino_medio?.status === filtros.ensinoMedio) {
+                extraPoints += 2.5;
+                extraDetails.push('Ensino Médio');
+            }
+
+            if (temFiltroCompleto && completo) {
+                extraPoints += 1;
+                extraDetails.push('Perfil Completo');
+            }
+
+            if (filtros.ensinoSuperior === 'nenhum') {
+                if (!t.formacoes || t.formacoes.length === 0) {
+                    extraPoints += 5;
+                    extraDetails.push('Sem superior');
+                }
+            } else {
+                const formacoes = t.formacoes || [];
+                let bestMatchScore = 0;
+                let bestMatchReason = '';
+
+                const cursosDaArea = temFiltroArea && ESTRUTURA_ACADEMICA[filtros.areaFormacao] ? ESTRUTURA_ACADEMICA[filtros.areaFormacao].map(normalizarTexto) : [];
+                const tecnicosRelacionados = temFiltroArea && MAPA_RELACIONAMENTOS[filtros.areaFormacao] ? MAPA_RELACIONAMENTOS[filtros.areaFormacao].map(normalizarTexto) : [];
+
+                formacoes.forEach(f => {
+                    if (temFiltroSuperiorStatus && f.status !== filtros.ensinoSuperior && f.status !== 'completo') return;
+
+                    const cursoNorm = normalizarTexto(f.curso || '');
+                    let currentScore = 0;
+                    let currentReason = '';
+
+                    const isExactMatch = temFiltroSuperiorNome && cursoNorm === normalizarTexto(filtros.cursoSuperior);
+                    const isAreaMatch = temFiltroArea && cursosDaArea.some(c => cursoNorm.includes(c) || c.includes(cursoNorm));
+                    const isTechMatch = temFiltroArea && tecnicosRelacionados.some(c => cursoNorm.includes(c) || c.includes(cursoNorm));
+                    const isApproxMatch = temFiltroSuperiorNome && cursoNorm.includes(normalizarTexto(filtros.cursoSuperior));
+
+                    // Valores relativos ao máximo base (15)
+                    if (isExactMatch) { currentScore = 15; currentReason = 'Formação Exata'; }
+                    else if (isAreaMatch) { currentScore = 15 * 0.85; currentReason = 'Mesma Área'; }
+                    else if (isTechMatch) { currentScore = 15 * 0.70; currentReason = 'Formação Relacionada'; }
+                    else if (isApproxMatch) { currentScore = 15 * 0.50; currentReason = 'Match Aproximado'; }
+
+                    if (currentScore > bestMatchScore) {
+                        bestMatchScore = currentScore;
+                        bestMatchReason = currentReason;
+                    }
+                });
+
+                if (bestMatchScore > 0) {
+                    extraPoints += bestMatchScore;
+                    extraDetails.push(bestMatchReason);
+                } else if (!exigeSuperior) {
+                    // CASO 2 Bônus: A vaga não exigiu, mas o candidato tem curso que bateu na palavra chave
+                    if (t._matchedKws && t._matchedKws.length > 0) {
+                        const formacoesStr = formacoes.map(f => normalizarTexto(f.curso || '')).join(' ');
+                        const kwInFormacao = t._matchedKws.some(kw => formacoesStr.includes(kw));
+                        if (kwInFormacao) {
+                            extraPoints += 7.5;
+                            extraDetails.push('Formação Relevante');
+                        }
                     }
                 }
-
-                // Integridade (Filtro por Completo)
-                if (temFiltroCompleto && completo) extraPoints += 1;
-
-                totalEarnedPoints += Math.min(extraPoints, PESOS_BASE.extra);
             }
+
+            const finalExtra = Math.min(extraPoints, limitePontuacaoExtra);
+            totalEarnedPoints += finalExtra;
+            if (extraDetails.length > 0) matchBreakdown.push(`⭐ Extra/Formação: ${extraDetails.join(', ')} (+${finalExtra.toFixed(1)} pts)`);
+
 
             // --- CÁLCULO FINAL COM REDISTRIBUIÇÃO ---
             let finalScore = 0;
             if (totalActiveWeight > 0) {
-                // A mágica da redistribuição: (pontos ganhos / total que ele PODERIA ganhar) * 100
                 finalScore = Math.round((totalEarnedPoints / totalActiveWeight) * 100);
             }
             
@@ -1183,6 +1337,7 @@ export default function EmpresaDashboard() {
                 ...t,
                 idade,
                 matchScore: finalScore,
+                matchBreakdown,
                 completo
             };
         });
@@ -1346,11 +1501,58 @@ export default function EmpresaDashboard() {
                             {loadingCandidatos ? 'Buscando...' : `${modalCandidatos.candidatos.length} candidatura(s)`}
                         </p>
                         {loadingCandidatos && <p style={{ textAlign: 'center', color: 'var(--neon-blue)' }}>Carregando...</p>}
+                        {!loadingCandidatos && modalCandidatos.candidatos.length > 0 && (
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '8px' }}>
+                                <button 
+                                    onClick={() => setFiltroStatusModal('todos')}
+                                    style={{ 
+                                        padding: '6px 14px', 
+                                        borderRadius: '20px', 
+                                        fontSize: '0.75rem', 
+                                        fontWeight: 800,
+                                        background: filtroStatusModal === 'todos' ? 'rgba(0,141,76,0.1)' : 'transparent',
+                                        color: filtroStatusModal === 'todos' ? 'var(--norte-dark-green)' : '#64748b',
+                                        border: '1px solid',
+                                        borderColor: filtroStatusModal === 'todos' ? 'var(--norte-green)' : '#e2e8f0',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    Todos ({modalCandidatos.candidatos.length})
+                                </button>
+                                {STATUS_CAND.map(st => {
+                                    const count = modalCandidatos.candidatos.filter(cand => (cand.status || 'pendente') === st).length;
+                                    const label = LABEL_STATUS[st].substring(LABEL_STATUS[st].indexOf(' ') + 1);
+                                    return (
+                                        <button 
+                                            key={st}
+                                            onClick={() => setFiltroStatusModal(st)}
+                                            style={{ 
+                                                padding: '6px 14px', 
+                                                borderRadius: '20px', 
+                                                fontSize: '0.75rem', 
+                                                fontWeight: 800,
+                                                background: filtroStatusModal === st ? COR_STATUS[st] : 'transparent',
+                                                color: filtroStatusModal === st ? TEXT_COR_STATUS[st] : '#64748b',
+                                                border: '1px solid',
+                                                borderColor: filtroStatusModal === st ? TEXT_COR_STATUS[st] : '#e2e8f0',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            {label} ({count})
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                         {!loadingCandidatos && modalCandidatos.candidatos.length === 0 && (
                             <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}><Users size={40} style={{ opacity: 0.4, marginBottom: '1rem' }} /><p>Nenhuma candidatura ainda.</p></div>
                         )}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            {modalCandidatos.candidatos.map((c, i) => {
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            {modalCandidatos.candidatos
+                                .filter(c => filtroStatusModal === 'todos' || (c.status || 'pendente') === filtroStatusModal)
+                                .map((c, i) => {
                                 const cv = c.curriculos;
                                 return (
                                     <div key={i} style={{ 
@@ -1359,7 +1561,9 @@ export default function EmpresaDashboard() {
                                         borderRadius: '12px', 
                                         padding: '1.25rem',
                                         boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                                        transition: 'all 0.2s ease'
+                                        transition: 'all 0.2s ease',
+                                        position: 'relative',
+                                        overflow: 'visible'
                                     }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
                                             <div style={{ flex: 1, minWidth: '250px' }}>
@@ -1381,7 +1585,7 @@ export default function EmpresaDashboard() {
                                                         />
                                                     </button>
                                                     <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--norte-dark-green)', margin: '0' }}>{cv?.nome || 'Sem currículo'}</p>
-                                                    <HeatmapBadge score={c.score_afinidade || 0} />
+                                                    <HeatmapBadge score={c.score_afinidade || 0} isCompanyView={true} breakdown={c.score_breakdown} />
                                                 </div>
                                                 
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1654,8 +1858,46 @@ export default function EmpresaDashboard() {
                                         </div>
                                     </div>
 
+                                    {/* --- EXIGÊNCIAS ACADÊMICAS --- */}
+                                    <div style={{ background: 'rgba(0, 50, 100, 0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(0, 141, 76, 0.1)', marginBottom: '0.5rem' }}>
+                                        <h4 style={{ margin: '0 0 1rem 0', color: 'var(--norte-dark-green)', fontSize: '0.9rem' }}>🎓 Formação Acadêmica (Filtro Inteligente)</h4>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
+                                            <div className="input-group">
+                                                <label>Nível Superior exigido?</label>
+                                                <select className="neon-input" value={newVaga.ensino_superior_status} onChange={e => setNewVaga({ ...newVaga, ensino_superior_status: e.target.value })}>
+                                                    <option value="nenhum">Nenhum / Ignorar</option>
+                                                    <option value="completo">Exige Completo</option>
+                                                    <option value="cursando">Aceita Cursando / Completo</option>
+                                                </select>
+                                            </div>
+
+                                            {newVaga.ensino_superior_status !== 'nenhum' && (
+                                                <>
+                                                    <div className="input-group">
+                                                        <label>Área de Formação (Expande o Match)</label>
+                                                        <select className="neon-input" value={newVaga.area_formacao} onChange={e => setNewVaga({ ...newVaga, area_formacao: e.target.value })}>
+                                                            <option value="">Qualquer Área...</option>
+                                                            {AREAS_FORMACAO.map(area => (
+                                                                <option key={area} value={area}>{area}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="input-group">
+                                                        <label>Ou digite um Curso Específico</label>
+                                                        <input 
+                                                            className="neon-input" 
+                                                            placeholder="Ex: Contabilidade, Engenharia Civil..." 
+                                                            value={newVaga.curso_superior} 
+                                                            onChange={e => setNewVaga({ ...newVaga, curso_superior: e.target.value })} 
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     <div className="input-group">
-                                        <label style={{ fontWeight: 'bold' }}>DESCRIÇÃO DAS ATIVIDADES</label>
+                                        <label style={{ fontWeight: 'bold' }}>DESCRIÇÃO DAS ATIVIDADES *</label>
                                         <textarea className="neon-input" required style={{ minHeight: '120px' }} placeholder="Descreva aqui o dia a dia da função e o que você espera do candidato..." value={newVaga.descricao} onChange={e => setNewVaga({ ...newVaga, descricao: e.target.value })} />
                                     </div>
                                     
@@ -1688,6 +1930,12 @@ export default function EmpresaDashboard() {
                                         </span>
                                         {vaga.modalidade && <span style={{ fontSize: '0.7rem', background: 'rgba(181,53,246,0.1)', color: 'var(--neon-purple)', padding: '2px 8px', borderRadius: '10px' }}>{LABEL_MODAL[vaga.modalidade]}</span>}
                                         {vaga.cidade && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>📍 {vaga.cidade}</span>}
+                                        {vaga.ensino_superior_status && vaga.ensino_superior_status !== 'nenhum' && (
+                                            <span style={{ fontSize: '0.7rem', background: 'rgba(0, 141, 76, 0.1)', color: 'var(--norte-green)', border: '1px solid rgba(0, 141, 76, 0.2)', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
+                                                🎓 {vaga.ensino_superior_status === 'completo' ? 'Superior' : 'Cursando+'}
+                                                {vaga.area_formacao ? ` - ${vaga.area_formacao.split(' ')[0]}` : ''}
+                                            </span>
+                                        )}
                                     </div>
                                     {(vaga.salario_min || vaga.salario_max) && (
                                         <p style={{ fontSize: '0.85rem', color: '#22c55e', margin: '4px 0', fontWeight: 600 }}>
@@ -1882,19 +2130,30 @@ export default function EmpresaDashboard() {
                                                 <option value="">Qualquer status...</option>
                                                 <option value="completo">Completo</option>
                                                 <option value="cursando">Cursando</option>
-                                                <option value="nenhum">Nenhum</option>
+                                                <option value="nenhum">Nenhum (Ignorar Superior)</option>
                                             </select>
                                         </div>
                                         {filtros.ensinoSuperior !== 'nenhum' && (
-                                            <div className="input-group">
-                                                <label>Qual o curso? (Pesquisa)</label>
-                                                <input 
-                                                    className="neon-input" 
-                                                    placeholder="Ex: Administração, Direito..." 
-                                                    value={filtros.cursoSuperior} 
-                                                    onChange={e => atualizarFiltro('cursoSuperior', e.target.value)} 
-                                                />
-                                            </div>
+                                            <>
+                                                <div className="input-group">
+                                                    <label>Área de Formação (Expande o Match)</label>
+                                                    <select className="neon-input" value={filtros.areaFormacao} onChange={e => atualizarFiltro('areaFormacao', e.target.value)}>
+                                                        <option value="">Qualquer Área...</option>
+                                                        {AREAS_FORMACAO.map(area => (
+                                                            <option key={area} value={area}>{area}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="input-group">
+                                                    <label>Ou digite um curso específico</label>
+                                                    <input 
+                                                        className="neon-input" 
+                                                        placeholder="Ex: Administração, Direito..." 
+                                                        value={filtros.cursoSuperior} 
+                                                        onChange={e => atualizarFiltro('cursoSuperior', e.target.value)} 
+                                                    />
+                                                </div>
+                                            </>
                                         )}
                                     </div>
 
@@ -2041,7 +2300,7 @@ export default function EmpresaDashboard() {
                                             </td>
                                             <td style={{ padding: '1rem' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                    <HeatmapBadge score={t.matchScore} />
+                                                    <HeatmapBadge score={t.matchScore} isCompanyView={true} breakdown={t.matchBreakdown} />
                                                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', maxWidth: '140px', lineHeight: '1.2' }}>
                                                         Compatibilidade baseada em experiência e habilidades
                                                     </span>
@@ -2182,7 +2441,7 @@ export default function EmpresaDashboard() {
                                                 </div>
                                             </td>
                                             <td style={{ padding: '1rem' }}>
-                                                <HeatmapBadge score={t.matchScore} />
+                                                <HeatmapBadge score={t.matchScore} isCompanyView={true} breakdown={t.matchBreakdown} />
                                             </td>
                                             <td style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                                                 {t.cidade || '—'} {t.bairro ? `(${t.bairro})` : ''}

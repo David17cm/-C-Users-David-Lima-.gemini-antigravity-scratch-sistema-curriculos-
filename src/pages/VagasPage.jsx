@@ -1,18 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, Building, ArrowLeft, Search, X, CheckCircle } from 'lucide-react';
+import { Briefcase, Building, ArrowLeft, Search, X, CheckCircle, AlertTriangle, ChevronRight, UserCheck, Pencil } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Skeleton, CardSkeleton } from '../components/ui/Skeleton';
 import CandidateNavbar from '../components/layout/CandidateNavbar';
 import { NorteToast } from '../components/ui/NorteToast';
+import { calculateScore, getRequirementAnalysis } from '../utils/matchingEngine';
+import HeatmapBadge from '../components/ui/HeatmapBadge';
 
 const isVagaExpirada = (data_limite) => {
     if (!data_limite) return false;
-    // Define a data limite as 23:59:59 do dia no fuso local para evitar confusão
-    const [ano, mes, dia] = data_limite.split('-').map(Number);
-    const limite = new Date(ano, mes - 1, dia, 23, 59, 59);
-    return new Date() > limite;
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+    const limite = new Date(data_limite + 'T12:00:00Z');
+    return hoje > limite;
 };
 
 export default function VagasPage() {
@@ -21,6 +23,7 @@ export default function VagasPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedVaga, setSelectedVaga] = useState(null); // vaga aberta no modal
     const [hasCV, setHasCV] = useState(false);
+    const [cvData, setCvData] = useState(null); // Guardar dados do CV para scoring
     const [candidaturas, setCandidaturas] = useState(new Set());
     const [candidatando, setCandidatando] = useState(false);
     const [reportingVaga, setReportingVaga] = useState(false);
@@ -29,27 +32,53 @@ export default function VagasPage() {
     const [toast, setToast] = useState({ message: '', type: 'info' });
     const [profilePhoto, setProfilePhoto] = useState(null);
     const [showMotivModal, setShowMotivModal] = useState(false);
+    const [scoreWarning, setScoreWarning] = useState(null); // { score, missing, vaga }
+    
+    // Estados para Paginação e Debounce
+    const [currentPage, setCurrentPage] = useState(0);
+    const [pageSize] = useState(20);
+    const [totalCount, setTotalCount] = useState(0);
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+
     const { user, loading: authLoading } = useAuth();
     const navigate = useNavigate();
 
     useEffect(() => {
         if (user) {
             checkUserCV();
-            fetchVagas();
             fetchCandidaturas();
         }
     }, [user]);
 
-    const showToast = (msg, type = 'success') => {
-        setToast({ msg, type });
-        setTimeout(() => setToast(null), 4000);
+    // Efeito de Debounce para a busca
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+            setCurrentPage(0); // Volta para a primeira página ao buscar
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    // Efeito para buscar vagas quando a página ou a busca mudar
+    useEffect(() => {
+        if (user) {
+            fetchVagas();
+        }
+    }, [user, currentPage, debouncedSearch]);
+
+
+    const showToast = (message, type = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast({ message: '', type: 'info' }), 4000);
     };
 
     const checkUserCV = async () => {
         try {
-            const { data } = await supabase.from('curriculos').select('id, foto_url').eq('user_id', user.id).limit(1).maybeSingle();
+            const { data } = await supabase.from('curriculos').select('*').eq('user_id', user.id).limit(1).maybeSingle();
             if (data) {
                 setHasCV(true);
+                setCvData(data);
                 setProfilePhoto(data.foto_url);
             } else {
                 setHasCV(false);
@@ -61,50 +90,87 @@ export default function VagasPage() {
 
     const fetchVagas = async () => {
         setLoading(true);
-        const { data } = await supabase
-            .from('vagas')
-            .select('*, empresas(razao_social, logo_url, historia, telefone, email_contato, cidade, bairro, endereco)')
-            .eq('status', 'aberta')
-            .order('created_at', { ascending: false });
-        if (data) setVagas(data);
-        setLoading(false);
+        try {
+            const from = currentPage * pageSize;
+            const to = from + pageSize - 1;
+
+            const today = new Date().toISOString().split('T')[0];
+            let query = supabase
+                .from('vagas')
+                .select('*, empresas(*)', { count: 'exact' })
+                .eq('status', 'aberta')
+                .or(`data_limite.is.null,data_limite.gte.${today}`);
+
+            if (debouncedSearch) {
+                // Filtro por título ou descrição no banco (Case Insensitive)
+                query = query.or(`titulo.ilike.%${debouncedSearch}%,descricao.ilike.%${debouncedSearch}%`);
+            }
+
+            const { data, error, count } = await query
+                .order('created_at', { ascending: false })
+                .range(from, to);
+
+            if (error) throw error;
+            setVagas(data || []);
+            setTotalCount(count || 0);
+        } catch (err) {
+            console.error('Erro ao buscar vagas:', err);
+            showToast('Falha na conexão com o banco de dados.', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
+
 
     const fetchCandidaturas = async () => {
         const { data } = await supabase.from('candidaturas').select('vaga_id').eq('user_id', user.id);
         if (data) setCandidaturas(new Set(data.map(c => c.vaga_id)));
     };
 
-    const handleCandidatar = async (vagaId) => {
+    const handleCandidatar = async (vaga, bypassWarning = false) => {
+        if (candidatando) return; // Trava de segurança contra cliques múltiplos
         if (!hasCV) {
             setShowMotivModal(true);
             return;
         }
+
+
+        // --- NOVA LÓGICA DE SCORE (20% MATCH) ---
+        if (!bypassWarning) {
+            const { score } = calculateScore(cvData, vaga, 'vaga');
+            if (score <= 20) {
+                const { missing } = getRequirementAnalysis(cvData, vaga);
+                setScoreWarning({ score, missing, vaga });
+                return;
+            }
+        }
+
         setCandidatando(true);
+        setScoreWarning(null); // Limpa aviso se houver
         try {
-            const { error } = await supabase.from('candidaturas').insert([{ user_id: user.id, vaga_id: vagaId }]);
+            const { error } = await supabase.from('candidaturas').insert([{ user_id: user.id, vaga_id: vaga.id }]);
             if (error) throw error;
             showToast('Candidatura enviada com sucesso! 🚀');
             fetchCandidaturas();
+            if (selectedVaga?.id === vaga.id) setSelectedVaga(null); // Fecha modal de detalhes se estiver aberto
         } catch (err) {
-            setToast({ message: 'Erro ao se candidatar: ' + err.message, type: 'error' });
+            showToast('Erro ao se candidatar: ' + err.message, 'error');
         } finally {
             setCandidatando(false);
         }
     };
 
-    const vagasFiltradas = useMemo(() => {
-        const q = searchQuery.toLowerCase();
-        return vagas.filter(v =>
-            v.titulo.toLowerCase().includes(q) ||
-            v.empresas?.razao_social?.toLowerCase().includes(q) ||
-            v.descricao.toLowerCase().includes(q)
-        );
-    }, [vagas, searchQuery]);
+    const selectedScore = useMemo(() => {
+        if (!selectedVaga || !cvData) return null;
+        return calculateScore(cvData, selectedVaga, 'vaga');
+    }, [selectedVaga, cvData]);
+
 
     const handleDenunciarInterno = async () => {
+        if (submittingReport) return; // Trava contra cliques múltiplos
         if (!user) { setToast({ message: 'Faça login para denunciar.', type: 'info' }); return; }
         if (!reportMotive.trim()) { setToast({ message: 'Por favor, descreva o motivo da denúncia.', type: 'info' }); return; }
+
 
         setSubmittingReport(true);
         try {
@@ -144,7 +210,7 @@ export default function VagasPage() {
     return (
         <div>
             {/* Toast de feedback */}
-            {toast && (
+            {toast.message && (
                 <div style={{
                     position: 'fixed', top: '1.5rem', right: '1rem', left: 'auto', zIndex: 9999,
                     maxWidth: 'calc(100vw - 2rem)',
@@ -155,7 +221,159 @@ export default function VagasPage() {
                     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
                     display: 'flex', alignItems: 'center', gap: '0.5rem'
                 }}>
-                    <CheckCircle size={18} /> {toast.msg}
+                    <CheckCircle size={18} /> {toast.message}
+                </div>
+            )}
+
+            {/* Modal de Detalhes de Score Baixo (Afinidade Consciente) */}
+            {scoreWarning && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+                    onClick={(e) => e.target === e.currentTarget && setScoreWarning(null)}>
+                    <div style={{ 
+                        maxWidth: '480px', width: '100%', padding: window.innerWidth < 768 ? '2.5rem 1.75rem' : '3rem 2.5rem', textAlign: 'center', 
+                        background: '#fff', borderRadius: '32px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                        border: '1px solid #e2e8f0',
+                        position: 'relative',
+                        maxHeight: '90vh',
+                        overflowY: 'auto'
+                    }}>
+                        <div style={{ 
+                            width: window.innerWidth < 768 ? '64px' : '80px', 
+                            height: window.innerWidth < 768 ? '64px' : '80px', 
+                            background: 'rgba(235, 191, 33, 0.1)', 
+                            borderRadius: '50%', display: 'flex', alignItems: 'center', 
+                            justifyContent: 'center', margin: '0 auto 1.5rem',
+                            border: '2px solid rgba(235, 191, 33, 0.2)'
+                        }}>
+                            <AlertTriangle size={window.innerWidth < 768 ? 32 : 40} color="#f59e0b" />
+                        </div>
+                        
+                        <div style={{ marginBottom: '2rem' }}>
+                            <h2 style={{ color: '#0f172a', fontSize: window.innerWidth < 768 ? '1.75rem' : '2.1rem', fontWeight: 900, marginBottom: '0.75rem', letterSpacing: '-0.03em' }}>Afinidade de {scoreWarning.score}%</h2>
+                            <p style={{ color: '#ef4444', fontSize: window.innerWidth < 768 ? '1rem' : '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>VOCÊ DEVE MELHORAR O SEU PERFIL</p>
+                            <p style={{ color: '#64748b', fontSize: '1rem', lineHeight: 1.6, maxWidth: '340px', margin: '0 auto' }}>
+                                Compatibilidade de apenas {scoreWarning.score}%. Ajuste seu currículo para garantir sua contratação.
+                            </p>
+                        </div>
+
+                        {scoreWarning.missing.length > 0 && (
+                            <div style={{ 
+                                background: '#f8fafc', 
+                                border: '1px solid #e2e8f0', 
+                                borderRadius: '24px', 
+                                padding: window.innerWidth < 768 ? '1.5rem 1.25rem' : '2rem 1.5rem', 
+                                marginBottom: '2.5rem', 
+                                textAlign: 'left',
+                                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                            }}>
+                                <h4 style={{ margin: '0 0 1.25rem 0.25rem', fontSize: '0.7rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span>💡</span> O QUE FALTA NO SEU PERFIL:
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {scoreWarning.missing.slice(0, 3).map((m, i) => (
+                                        <div key={i} style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '12px',
+                                            padding: '12px 14px',
+                                            background: '#fff',
+                                            borderRadius: '16px',
+                                            border: '1px solid #edf2f7',
+                                            boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
+                                        }}>
+                                            <div style={{ 
+                                                width: '18px', 
+                                                height: '18px', 
+                                                borderRadius: '50%', 
+                                                background: '#fffbeb', 
+                                                border: '1px solid #fde68a', 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'center', 
+                                                flexShrink: 0 
+                                            }}>
+                                                <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#f59e0b' }}></div>
+                                            </div>
+                                            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#334155', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+                                                {m}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {scoreWarning.missing.length > 3 && (
+                                        <p style={{ margin: '8px 0 0 4px', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>
+                                            + {scoreWarning.missing.length - 3} outros itens recomendados
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <button 
+                                onClick={() => navigate('/dashboard')} 
+                                className="neon-button" 
+                                style={{ 
+                                    margin: 0, 
+                                    background: 'var(--norte-green)', 
+                                    color: '#fff',
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    gap: '12px', 
+                                    height: window.innerWidth < 768 ? '58px' : '64px',
+                                    borderRadius: '18px',
+                                    fontSize: '1rem',
+                                    fontWeight: 800,
+                                    boxShadow: '0 12px 24px rgba(0, 141, 76, 0.25)',
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <Pencil size={window.innerWidth < 768 ? 18 : 20} /> EDITAR O CURRÍCULO
+                            </button>
+                            
+                            <button 
+                                onClick={() => { setScoreWarning(null); setSelectedVaga(null); }} 
+                                style={{ 
+                                    background: 'transparent', 
+                                    color: '#64748b', 
+                                    border: '1px solid #e2e8f0', 
+                                    borderRadius: '18px', 
+                                    padding: '14px', 
+                                    fontWeight: 700, 
+                                    cursor: 'pointer', 
+                                    fontSize: '0.9rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <Search size={18} /> VER OUTRAS VAGAS
+                            </button>
+
+                            <button 
+                                onClick={() => handleCandidatar(scoreWarning.vaga, true)} 
+                                style={{ 
+                                    background: 'none', 
+                                    border: 'none', 
+                                    color: '#ef4444', 
+                                    fontSize: '0.82rem', 
+                                    fontWeight: 700, 
+                                    cursor: 'pointer',
+                                    marginTop: '8px',
+                                    padding: '10px',
+                                    textDecoration: 'underline',
+                                    opacity: 0.8
+                                }}
+                            >
+                                SE CANDIDATAR MESMO ASSIM
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -225,56 +443,57 @@ export default function VagasPage() {
             {selectedVaga && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
                     onClick={(e) => e.target === e.currentTarget && setSelectedVaga(null)}>
-                    <div style={{
-                        background: '#ffffff',
-                        borderRadius: '16px',
-                        width: '100%',
-                        maxWidth: '640px',
-                        maxHeight: '90vh',
-                        overflowY: 'auto',
-                        position: 'relative',
-                        boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
-                        border: '1px solid #e5e7eb',
-                        padding: 'window.innerWidth < 768 ? "1.25rem" : "0"' // Usar padding interno responsivo
-                    }}>
-                        {/* Header do Modal */}
-                        <div style={{ 
-                            padding: window.innerWidth < 768 ? '1.5rem 1rem 1rem' : '2rem 2rem 1.5rem', 
-                            borderBottom: '1px solid #f1f5f9', 
-                            position: 'sticky', 
-                            top: 0, 
-                            background: '#fff', 
-                            zIndex: 10, 
-                            borderRadius: '16px 16px 0 0' 
+                        <div style={{
+                            background: '#ffffff',
+                            borderRadius: '16px',
+                            width: '100%',
+                            maxWidth: '640px',
+                            maxHeight: '90vh',
+                            overflowY: 'auto',
+                            position: 'relative',
+                            boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+                            border: '1px solid #e5e7eb',
+                            boxSizing: 'border-box'
                         }}>
-                            <button onClick={() => { setSelectedVaga(null); setReportingVaga(false); }} style={{
-                                position: 'absolute', top: '1.25rem', right: '1.25rem',
-                                background: '#f1f5f9', border: 'none', borderRadius: '50%',
-                                width: '36px', height: '36px', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                color: '#64748b', fontSize: '1.2rem', fontWeight: 'bold', lineHeight: 1
-                            }}>✕</button>
-
-                            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <div style={{ width: '64px', height: '64px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                                    {selectedVaga.empresas?.logo_url ? (
-                                        <img src={selectedVaga.empresas.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    ) : (
-                                        <Building size={32} color="#94a3b8" />
-                                    )}
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <h2 style={{ color: '#0f172a', margin: 0, fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.2 }}>
-                                        {selectedVaga.titulo}
-                                    </h2>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                                        <Building size={14} color="var(--neon-purple)" />
-                                        <span style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600 }}>
-                                            {selectedVaga.empresas?.razao_social || 'Empresa Confidencial'}
-                                        </span>
+                            {/* Header do Modal */}
+                            <div style={{ 
+                                padding: window.innerWidth < 768 ? '1.5rem 1rem 1rem' : '2rem 2rem 1.5rem', 
+                                borderBottom: '1px solid #f1f5f9', 
+                                position: 'sticky', 
+                                top: 0, 
+                                background: '#fff', 
+                                zIndex: 10, 
+                                borderRadius: '16px 16px 0 0' 
+                            }}>
+                                <button onClick={() => { setSelectedVaga(null); setReportingVaga(false); }} style={{
+                                    position: 'absolute', top: '1rem', right: '1rem',
+                                    background: '#f1f5f9', border: 'none', borderRadius: '50%',
+                                    width: '36px', height: '36px', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: '#64748b', fontSize: '1.2rem', fontWeight: 'bold', lineHeight: 1,
+                                    zIndex: 20
+                                }}>✕</button>
+    
+                                <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start', marginBottom: '1.5rem', paddingRight: '40px' }}>
+                                    <div style={{ width: '56px', height: '56px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                                        {selectedVaga.empresas?.logo_url ? (
+                                            <img src={selectedVaga.empresas.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                        ) : (
+                                            <Building size={28} color="#94a3b8" />
+                                        )}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <h2 style={{ color: '#0f172a', margin: 0, fontSize: '1.35rem', fontWeight: 800, lineHeight: 1.2, wordBreak: 'break-word' }}>
+                                            {selectedVaga.titulo}
+                                        </h2>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                                            <Building size={14} color="var(--neon-purple)" />
+                                            <span style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {selectedVaga.empresas?.razao_social || 'Empresa Confidencial'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
                             {/* Badges de info */}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -365,7 +584,7 @@ export default function VagasPage() {
                                                 INSCRIÇÕES ENCERRADAS
                                             </div>
                                         ) : (
-                                            <button onClick={() => handleCandidatar(selectedVaga.id)} disabled={candidatando} className="neon-button" style={{ margin: 0, background: 'var(--neon-purple)', fontWeight: 700, fontSize: '1rem' }}>
+                                            <button onClick={() => handleCandidatar(selectedVaga)} disabled={candidatando} className="neon-button" style={{ margin: 0, background: 'var(--neon-purple)', fontWeight: 700, fontSize: '1rem' }}>
                                                 {candidatando ? '⏳ ENVIANDO...' : '🚀 CANDIDATAR-SE'}
                                             </button>
                                         )}
@@ -415,13 +634,15 @@ export default function VagasPage() {
                     </div>
                 </div>
 
-                {vagasFiltradas.length === 0 ? (
+                {vagas.length === 0 ? (
                     <div className="glass-panel" style={{ textAlign: 'center' }}>
                         <p style={{ color: 'var(--text-muted)' }}>Nenhuma vaga encontrada.</p>
                     </div>
                 ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
-                        {vagasFiltradas.map((vaga) => (
+                    <>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '1.5rem' }}>
+                            {vagas.map((vaga) => (
+
                             <div key={vaga.id} className="glass-panel" style={{
                                 padding: '1.75rem',
                                 display: 'flex',
@@ -563,7 +784,63 @@ export default function VagasPage() {
                             </div>
                         ))}
                     </div>
+
+                    {/* Paginação */}
+                    {totalCount > pageSize && (
+                        <div style={{ 
+                            marginTop: '3rem', 
+                            display: 'flex', 
+                            justifyContent: 'center', 
+                            alignItems: 'center', 
+                            gap: '1.5rem',
+                            paddingBottom: '4rem'
+                        }}>
+                            <button 
+                                disabled={currentPage === 0 || loading}
+                                onClick={() => {
+                                    setCurrentPage(p => p - 1);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="neon-button"
+                                style={{ 
+                                    margin: 0, 
+                                    width: 'auto', 
+                                    padding: '10px 20px',
+                                    background: 'var(--neon-purple)',
+                                    opacity: (currentPage === 0 || loading) ? 0.5 : 1,
+                                    cursor: (currentPage === 0 || loading) ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                Anterior
+                            </button>
+                            
+                            <div style={{ color: 'var(--text-muted)', fontWeight: 600 }}>
+                                Página {currentPage + 1} de {Math.ceil(totalCount / pageSize)}
+                            </div>
+
+                            <button 
+                                disabled={currentPage >= Math.ceil(totalCount / pageSize) - 1 || loading}
+                                onClick={() => {
+                                    setCurrentPage(p => p + 1);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="neon-button"
+                                style={{ 
+                                    margin: 0, 
+                                    width: 'auto', 
+                                    padding: '10px 20px',
+                                    background: 'var(--neon-purple)',
+                                    opacity: (currentPage >= Math.ceil(totalCount / pageSize) - 1 || loading) ? 0.5 : 1,
+                                    cursor: (currentPage >= Math.ceil(totalCount / pageSize) - 1 || loading) ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                Próxima
+                            </button>
+                        </div>
+                    )}
+                    </>
                 )}
+
             </div>
 
             <NorteToast 

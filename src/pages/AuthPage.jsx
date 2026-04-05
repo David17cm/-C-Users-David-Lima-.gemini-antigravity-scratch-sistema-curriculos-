@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Compass, User, Lock, Mail, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Compass, User, Lock, Mail, CheckCircle2, AlertTriangle, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import BrandLogo from '../components/layout/BrandLogo';
 
@@ -31,6 +31,7 @@ export default function AuthPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState(null);
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
 
@@ -69,6 +70,12 @@ export default function AuthPage() {
     // Redirecionamento Automático após Login/Role carregar
     const { user, role, loading: authLoading } = useAuth();
     useEffect(() => {
+        // Se estamos no processo de recuperação de senha (verificado via URL hash),
+        // NÃO redirecionamos o usuário, para deixá-lo chegar na ResetPasswordPage.
+        if (window.location.hash.includes('type=recovery')) {
+            return;
+        }
+
         // Se temos um usuário e a carga do AuthContext finalizou
         if (user && !authLoading) {
             // Se temos um usuário logado mas sem perfil ainda, simplesmente aguardamos
@@ -223,10 +230,40 @@ export default function AuthPage() {
 
     const handleAuth = async (e) => {
         e.preventDefault();
-        if (isLogin) {
+        if (isForgotPassword) {
+            await handleForgotPassword();
+        } else if (isLogin) {
             await doLogin(email, password);
         } else {
             await handleSignup();
+        }
+    };
+
+    const handleForgotPassword = async () => {
+        setLoading(true);
+        setError(null);
+        setSuccessMessage(null);
+
+        const cleanEmail = email.trim();
+        if (!EMAIL_REGEX.test(cleanEmail)) {
+            setError('Por favor, insira um endereço de e-mail válido.');
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+                redirectTo: `${window.location.origin}/reset-password`,
+            });
+
+            if (resetError) throw resetError;
+
+            setSuccessMessage('E-mail de recuperação enviado! Verifique sua caixa de entrada.');
+            // Opcional: voltar para login após alguns segundos ou deixar o usuário decidir
+        } catch (err) {
+            setError(err.message || 'Erro ao enviar e-mail de recuperação.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -332,7 +369,7 @@ export default function AuthPage() {
                         <BrandLogo size={32} />
                     </div>
                     <h2 style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.03em', color: 'var(--norte-dark-green)', margin: 0 }}>
-                        {isLogin ? 'BEM-VINDO' : 'NOVO CADASTRO'}
+                        {isForgotPassword ? 'RECUPERAR SENHA' : isLogin ? 'BEM-VINDO' : 'NOVO CADASTRO'}
                     </h2>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.5rem' }}>
                         Acompanhe suas vagas na <span style={{ color: 'var(--norte-green)', fontWeight: 700 }}>Norte Empregos</span>
@@ -397,7 +434,11 @@ export default function AuthPage() {
                 )}
 
                 <form onSubmit={handleAuth}>
-                    {!isLogin && (
+                    {isForgotPassword ? (
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', marginBottom: '1.5rem' }}>
+                            Insira seu e-mail e enviaremos um link para você definir uma nova senha.
+                        </p>
+                    ) : !isLogin && (
                         <div className="input-group">
                             <label htmlFor="name">Nome Completo</label>
                             <div style={{ position: 'relative' }}>
@@ -435,46 +476,60 @@ export default function AuthPage() {
                         </div>
                     </div>
 
-                    <div className="input-group">
-                        <label htmlFor="password">Senha de Acesso</label>
-                        <div style={{ position: 'relative' }}>
-                            <Lock size={18} color="var(--text-muted)" style={{ position: 'absolute', top: '15px', left: '15px' }} />
-                            <input
-                                id="password"
-                                name="password"
-                                type={showPassword ? 'text' : 'password'}
-                                className="neon-input"
-                                style={{ paddingLeft: '45px', paddingRight: '45px' }}
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                minLength={isLogin ? 1 : 8}
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                style={{
-                                    position: 'absolute',
-                                    top: '12px',
-                                    right: '15px',
-                                    background: 'none',
-                                    border: 'none',
-                                    color: 'var(--text-muted)',
-                                    cursor: 'pointer',
-                                    padding: '4px'
-                                }}
-                            >
-                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                            </button>
+                    {!isForgotPassword && (
+                        <div className="input-group">
+                            <label htmlFor="password">Senha de Acesso</label>
+                            <div style={{ position: 'relative' }}>
+                                <Lock size={18} color="var(--text-muted)" style={{ position: 'absolute', top: '15px', left: '15px' }} />
+                                <input
+                                    id="password"
+                                    name="password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    className="neon-input"
+                                    style={{ paddingLeft: '45px', paddingRight: '45px' }}
+                                    placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required={!isForgotPassword}
+                                    minLength={isLogin ? 1 : 8}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    style={{
+                                        position: 'absolute',
+                                        top: '12px',
+                                        right: '15px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        padding: '4px'
+                                    }}
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                            {/* SEGURANÇA MED-03: Dica de requisitos de senha */}
+                            {!isLogin && (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '4px' }}>
+                                    Mínimo 8 caracteres, com ao menos 1 número.
+                                </p>
+                            )}
+                            
+                            {isLogin && (
+                                <div style={{ textAlign: 'right', marginTop: '8px' }}>
+                                    <button
+                                        type="button"
+                                        style={{ background: 'none', border: 'none', color: 'var(--norte-green)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}
+                                        onClick={() => { setIsForgotPassword(true); setError(null); setSuccessMessage(null); }}
+                                    >
+                                        Esqueci minha senha
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                        {/* SEGURANÇA MED-03: Dica de requisitos de senha */}
-                        {!isLogin && (
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '4px' }}>
-                                Mínimo 8 caracteres, com ao menos 1 número.
-                            </p>
-                        )}
-                    </div>
+                    )}
 
                     {!isLogin && (
                         <div className="input-group">
@@ -528,25 +583,35 @@ export default function AuthPage() {
                     <button
                         type="submit"
                         className="neon-button"
-                        disabled={loading || isLocked || (!isLogin && (!aceitouTermos || !aceitouPrivacidade))}
-                        style={{ opacity: (isLocked || (!isLogin && (!aceitouTermos || !aceitouPrivacidade))) ? 0.5 : 1 }}
+                        disabled={loading || isLocked || (!isLogin && !isForgotPassword && (!aceitouTermos || !aceitouPrivacidade))}
+                        style={{ opacity: (isLocked || (!isLogin && !isForgotPassword && (!aceitouTermos || !aceitouPrivacidade))) ? 0.5 : 1 }}
                     >
                         {isLocked
                             ? `BLOQUEADO (${lockCountdown}s)`
                             : loading
                                 ? (user ? 'REDIRECIONANDO...' : 'PROCESSANDO...')
-                                : (isLogin ? 'ENTRAR' : 'REGISTRAR')}
+                                : isForgotPassword ? 'ENVIAR E-MAIL' : (isLogin ? 'ENTRAR' : 'REGISTRAR')}
                     </button>
                 </form>
 
                 <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-                    <button
-                        type="button"
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
-                        onClick={() => { setIsLogin(!isLogin); setError(null); setLoginAttempts(0); setLockedUntil(null); }}
-                    >
-                        {isLogin ? 'Não tem conta? Registre-se.' : 'Já tem conta? Faça login.'}
-                    </button>
+                    {isForgotPassword ? (
+                        <button
+                            type="button"
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}
+                            onClick={() => { setIsForgotPassword(false); setError(null); setSuccessMessage(null); }}
+                        >
+                            <ArrowLeft size={16} /> Voltar para o login
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
+                            onClick={() => { setIsLogin(!isLogin); setError(null); setLoginAttempts(0); setLockedUntil(null); }}
+                        >
+                            {isLogin ? 'Não tem conta? Registre-se.' : 'Já tem conta? Faça login.'}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

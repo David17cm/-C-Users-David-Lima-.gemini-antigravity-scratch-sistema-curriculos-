@@ -6,7 +6,7 @@ import {
     Activity, Users, Briefcase, Mail, LogOut, ArrowRight,
     Filter, RefreshCw, ShieldAlert, Trash2, CheckCircle, Clock,
     Building, BarChart2, Shield, AlertTriangle, Database,
-    Plus, Download, Search, XCircle, Send, Lock, Menu, X, Compass
+    Plus, Download, Search, XCircle, Send, Lock, Menu, X, Compass, Bell
 } from 'lucide-react';
 import Navbar from '../components/layout/Navbar';
 import BrandLogo from '../components/layout/BrandLogo';
@@ -18,82 +18,141 @@ const TABS = [
     { id: 'vagas', label: 'Curadoria', icon: Briefcase },
     { id: 'metricas', label: 'Inteligência', icon: BarChart2 },
     { id: 'automacao', label: 'Automação', icon: Mail },
+    { id: 'notificacoes', label: 'Notificações', icon: Bell },
     { id: 'logs', label: 'Auditoria', icon: Clock },
     { id: 'lgpd', label: 'Privacidade', icon: Shield },
     { id: 'denuncias', label: 'Ouvidoria', icon: AlertTriangle },
     { id: 'contratacoes', label: 'Contratações', icon: CheckCircle }
 ];
 
-const TrendChart = ({ data }) => {
-    if (!data || data.length === 0) return null;
+const TrendChart = ({ data, isMobile }) => {
+    if (!data || data.length === 0) return (
+        <div className="glass-panel" style={{ height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            Aguardando dados oficiais de tráfego...
+        </div>
+    );
 
     const width = 800;
-    const height = 180;
-    const padding = 20;
+    const height = 200;
+    const paddingX = 60; // Aumentado para rótulos do Eixo Y
+    const paddingY = 40; // Espaço para rótulos de pontos
 
-    const maxVal = Math.max(...data.map(d => Math.max(d.visits, d.signups)), 10);
-    // Adiciona 10% de folga no topo para o gráfico respirar
-    const effectiveMax = maxVal * 1.1;
+    const maxVal = Math.max(...data.map(d => Math.max(d.visits || 0, d.signups || 0)), 1);
+    // Escala amigável para o Eixo Y (múltiplos de 5 ou 10)
+    const effectiveMax = Math.ceil(maxVal * 1.2 / 5) * 5;
     
-    const getX = (index) => (index / (data.length - 1 || 1)) * (width - 2 * padding) + padding;
-    const getY = (val) => height - ((val / effectiveMax) * (height - 2 * padding) + padding);
+    const getX = (index) => (index / (data.length - 1 || 1)) * (width - 2 * paddingX) + paddingX;
+    const getY = (val) => height - ((val / (effectiveMax || 1)) * (height - 2 * paddingY) + paddingY);
 
-    const visitsPath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.visits)}`).join(' ');
-    const signupsPath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getY(d.signups)}`).join(' ');
+    // Função para criar curva suave (Bezier)
+    const createPath = (values, key) => {
+        if (data.length < 2) return `M ${getX(0)} ${getY(values[0][key])} L ${getX(0)} ${getY(values[0][key])}`;
+        
+        return values.reduce((acc, d, i, arr) => {
+            const x = getX(i);
+            const y = getY(d[key]);
+            if (i === 0) return `M ${x} ${y}`;
+            
+            // Controle simples para curva suave
+            const prevX = getX(i - 1);
+            const prevY = getY(arr[i-1][key]);
+            const cp1x = prevX + (x - prevX) / 2;
+            const cp2x = prevX + (x - prevX) / 2;
+            
+            return `${acc} C ${cp1x} ${prevY}, ${cp2x} ${y}, ${x} ${y}`;
+        }, "");
+    };
+
+    const visitsPath = createPath(data, 'visits');
+    const signupsPath = createPath(data, 'signups');
 
     return (
-        <div className="glass-panel" style={{ width: '100%', height: height + 80, padding: '20px', marginTop: '20px', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+        <div className="glass-panel" style={{ 
+            width: '100%', 
+            height: isMobile ? '280px' : height + 100, 
+            padding: isMobile ? '12px' : '24px', 
+            marginTop: '20px', 
+            position: 'relative', 
+            overflow: 'hidden' 
+        }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: isMobile ? '0.7rem' : '0.85rem', color: 'var(--text-muted)', marginBottom: isMobile ? '15px' : '30px' }}>
                 <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    📈 Fluxo de Engajamento
+                    📈 {isMobile ? 'Fluxo' : 'Fluxo de Engajamento'}
                 </span>
-                <div style={{ display: 'flex', gap: '20px' }}>
+                <div style={{ display: 'flex', gap: '24px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-                        <div style={{ width: '12px', height: '12px', background: 'var(--norte-green)', borderRadius: '4px', boxShadow: '0 0 10px rgba(0, 141, 76, 0.3)' }}></div> Visitantes
+                        <div style={{ width: '10px', height: '10px', background: 'var(--norte-green)', borderRadius: '50%' }}></div> Visitantes
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-                        <div style={{ width: '12px', height: '12px', background: 'var(--norte-dark-green)', borderRadius: '4px', boxShadow: '0 0 10px rgba(0, 91, 50, 0.3)' }}></div> Inscrições
+                        <div style={{ width: '10px', height: '10px', background: 'var(--norte-dark-green)', borderRadius: '50%' }}></div> Inscrições
                     </span>
                 </div>
             </div>
             
-            <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'calc(100% - 40px)', overflow: 'visible' }}>
+            <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'calc(100% - 60px)', overflow: 'visible' }}>
                 <defs>
                     <linearGradient id="gradVisits" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style={{ stopColor: 'var(--norte-green)', stopOpacity: 0.4 }} />
+                        <stop offset="0%" style={{ stopColor: 'var(--norte-green)', stopOpacity: 0.2 }} />
                         <stop offset="100%" style={{ stopColor: 'var(--norte-green)', stopOpacity: 0 }} />
                     </linearGradient>
                     <linearGradient id="gradSignups" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style={{ stopColor: 'var(--norte-dark-green)', stopOpacity: 0.4 }} />
+                        <stop offset="0%" style={{ stopColor: 'var(--norte-dark-green)', stopOpacity: 0.2 }} />
                         <stop offset="100%" style={{ stopColor: 'var(--norte-dark-green)', stopOpacity: 0 }} />
                     </linearGradient>
                 </defs>
 
-                {/* Linhas de Grade (Suaves para Light/Dark mode) */}
-                {[0, 0.25, 0.5, 0.75, 1].map(pct => (
-                   <line key={pct} x1={padding} y1={getY(effectiveMax * pct)} x2={width-padding} y2={getY(effectiveMax * pct)} stroke="rgba(0, 141, 76, 0.08)" strokeWidth="1" strokeDasharray="4 4" />
-                ))}
+                {/* Eixo Y e Linhas de Grade */}
+                {[0, 0.25, 0.5, 0.75, 1].map(pct => {
+                    const val = Math.round(effectiveMax * pct);
+                    const y = getY(val);
+                    return (
+                        <g key={pct}>
+                            <text x={paddingX - 15} y={y + 4} textAnchor="end" style={{ fontSize: '10px', fill: 'var(--text-muted)', fontWeight: 600 }}>{val}</text>
+                            <line x1={paddingX} y1={y} x2={width - paddingX} y2={y} stroke="rgba(0, 141, 76, 0.05)" strokeWidth="1" />
+                        </g>
+                    );
+                })}
                 
-                {/* Preenchimento Dinâmico */}
-                <path d={`${visitsPath} L ${getX(data.length-1)} ${height} L ${getX(0)} ${height} Z`} fill="url(#gradVisits)" />
-                <path d={`${signupsPath} L ${getX(data.length-1)} ${height} L ${getX(0)} ${height} Z`} fill="url(#gradSignups)" />
+                {/* Preenchimento de Área */}
+                {data.length > 1 && (
+                    <>
+                        <path d={`${visitsPath} L ${getX(data.length-1)} ${height - paddingY/2} L ${getX(0)} ${height - paddingY/2} Z`} fill="url(#gradVisits)" style={{ transition: 'all 0.5s ease' }} />
+                        <path d={`${signupsPath} L ${getX(data.length-1)} ${height - paddingY/2} L ${getX(0)} ${height - paddingY/2} Z`} fill="url(#gradSignups)" style={{ transition: 'all 0.5s ease' }} />
+                    </>
+                )}
 
                 {/* Linhas Principais */}
-                <path d={visitsPath} fill="none" stroke="var(--norte-green)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 4px 6px rgba(0, 141, 76, 0.15))' }} />
-                <path d={signupsPath} fill="none" stroke="var(--norte-dark-green)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 4px 6px rgba(0, 91, 50, 0.15))' }} />
+                <path d={visitsPath} fill="none" stroke="var(--norte-green)" strokeWidth="4" strokeLinecap="round" style={{ filter: 'drop-shadow(0 4px 12px rgba(0, 141, 76, 0.2))' }} />
+                <path d={signupsPath} fill="none" stroke="var(--norte-dark-green)" strokeWidth="4" strokeLinecap="round" style={{ filter: 'drop-shadow(0 4px 12px rgba(0, 91, 50, 0.2))' }} />
                 
-                {/* Pontos Interativos */}
-                {data.length < 31 && data.map((d, i) => (
-                    <g key={i}>
-                        <circle cx={getX(i)} cy={getY(d.visits)} r="4.5" fill="#fff" stroke="var(--neon-blue)" strokeWidth="2.5" />
-                        <circle cx={getX(i)} cy={getY(d.signups)} r="4.5" fill="#fff" stroke="var(--neon-purple)" strokeWidth="2.5" />
-                    </g>
-                ))}
+                {/* Pontos e Rótulos Numéricos */}
+                {data.map((d, i) => {
+                    const vx = getX(i);
+                    const vy = getY(d.visits);
+                    const sx = getX(i);
+                    const sy = getY(d.signups);
+
+                    return (
+                        <g key={i}>
+                            {/* Visitantes */}
+                            <circle cx={vx} cy={vy} r="5" fill="#fff" stroke="var(--norte-green)" strokeWidth="3" />
+                            <text x={vx} y={vy - 12} textAnchor="middle" style={{ fontSize: '11px', fill: 'var(--norte-green)', fontWeight: 800 }}>
+                                {d.visits}
+                            </text>
+
+                            {/* Inscrições */}
+                            <circle cx={sx} cy={sy} r="5" fill="#fff" stroke="var(--norte-dark-green)" strokeWidth="3" />
+                            <text x={sx} y={sy + 20} textAnchor="middle" style={{ fontSize: '11px', fill: 'var(--norte-dark-green)', fontWeight: 800 }}>
+                                {d.signups}
+                            </text>
+                        </g>
+                    );
+                })}
             </svg>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 10px', position: 'absolute', bottom: '15px', width: 'calc(100% - 40px)' }}>
-               {data.filter((_, i) => i % Math.max(1, Math.floor(data.length/6)) === 0).map((d, i) => (
-                   <span key={i} style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: `0 ${paddingX}px`, position: 'absolute', bottom: '20px', width: '100%', boxSizing: 'border-box' }}>
+               {data.filter((_, i) => data.length < 8 || i % Math.max(1, Math.floor(data.length/7)) === 0).map((d, i) => (
+                   <span key={i} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>
                        {new Date(d.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                    </span>
                ))}
@@ -126,6 +185,29 @@ export default function AdminDashboard() {
     const [metricasTempo, setMetricasTempo] = useState({ dau: 0, wau: 0 });
     const [ativosAgora, setAtivosAgora] = useState(0);
     const [stats, setStats] = useState({ candidatos: 0, empresas: 0, perfisCompletos: 0, contratados: 0 });
+    const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
+
+    const handleTesteNotificacao = async () => {
+        if (typeof Notification === 'undefined') {
+            alert('Seu navegador não suporta notificações.');
+            return;
+        }
+
+        if (Notification.permission !== 'granted') {
+            const permission = await Notification.requestPermission();
+            setNotifPermission(permission);
+            if (permission !== 'granted') return;
+        }
+
+        // Disparo da Notificação Real
+        new Notification("Norte Empregos 🚀", {
+            body: "Olá David! Este é um teste de notificação do sistema. Tudo funcionando!",
+            icon: "/favicon.ico", // ou logo do sistema se disponível
+            badge: "/favicon.ico",
+            tag: "teste-admin",
+            requireInteraction: true
+        });
+    };
 
     // Listas
     const [usuariosList, setUsuariosList] = useState([]);
@@ -140,6 +222,52 @@ export default function AdminDashboard() {
     const [recentNotifications, setRecentNotifications] = useState([]);
     const [registrationData, setRegistrationData] = useState([]);
     const [chartPeriod, setChartPeriod] = useState(7);
+
+    // Push Notifications
+    const [pushTitle, setPushTitle] = useState('');
+    const [pushBody, setPushBody] = useState('');
+    const [pushUrl, setPushUrl] = useState('/vagas');
+    const [pushSubscribers, setPushSubscribers] = useState(0);
+    const [isSendingPush, setIsSendingPush] = useState(false);
+
+    const carregarSubscriptions = async () => {
+        const { count } = await supabase
+            .from('push_subscriptions')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'active');
+        setPushSubscribers(count || 0);
+    };
+
+    const notify = (msg, type = 'success') => {
+        setNotification({ msg, type });
+        setTimeout(() => setNotification(null), 5000);
+    };
+
+    const handleBroadcastPush = async (e) => {
+        e.preventDefault();
+        if (!pushTitle || !pushBody) return notify('Preencha título e mensagem!', 'error');
+        if (!window.confirm(`Deseja enviar esta notificação para ${pushSubscribers} usuários?`)) return;
+
+        setIsSendingPush(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('broadcast-push', {
+                body: { title: pushTitle, body: pushBody, url: pushUrl }
+            });
+
+            if (error) throw error;
+            
+            const totalSent = data?.success || 0;
+            notify(`🚀 ${totalSent} notificações disparadas com sucesso!`);
+            
+            setPushTitle('');
+            setPushBody('');
+        } catch (err) {
+            console.error('Erro ao enviar push:', err);
+            notify('Falha ao enviar: ' + err.message, 'error');
+        } finally {
+            setIsSendingPush(false);
+        }
+    };
     const [isSendingEmails, setIsSendingEmails] = useState(false);
     const [sendProgress, setSendProgress] = useState(null);
     const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
@@ -206,10 +334,12 @@ export default function AdminDashboard() {
         if (activeTab === 'visao') {
             const interval = setInterval(carregarAoVivo, 30000); // 30s
             return () => clearInterval(interval);
+        } else if (activeTab === 'notificacoes') {
+            carregarSubscriptions();
         }
     }, [activeTab]);
 
-
+    const isDavidAdmin = user?.email === 'admin@gmail.com';
 
     const carregarAoVivo = async () => {
         try {
@@ -719,9 +849,15 @@ export default function AdminDashboard() {
         notify('Status da empresa atualizado!', 'success');
     };
 
-    const notify = (message, type = 'success') => {
-        setNotification({ message, type });
-        setTimeout(() => setNotification(null), 4000);
+    const handleMudarPlano = async (id, novoPlano) => {
+        try {
+            const { error } = await supabase.from('empresas').update({ plan_type: novoPlano }).eq('id', id);
+            if (error) throw error;
+            carregarTodasEmpresas();
+            notify(`Plano alterado para ${novoPlano.toUpperCase()}!`, 'success');
+        } catch (err) {
+            notify('Erro ao alterar plano: ' + err.message, 'error');
+        }
     };
 
     const handleAcaoVaga = async (vagaId, novaStatus) => {
@@ -778,20 +914,26 @@ export default function AdminDashboard() {
         e.preventDefault();
         setCreatingEmpresa(true);
         try {
-            const { error } = await supabase.from('empresa_invites').insert([{
-                email: newEmpresaData.email,
-                password_temp: newEmpresaData.password,
-                razao_social: newEmpresaData.razao_social,
-                cnpj: newEmpresaData.cnpj,
-                status: 'pendente'
-            }]);
+            // [NOVO] Engenharia Sênior: Criação direta e confirmada via RPC
+            const { data, error } = await supabase.rpc('admin_create_empresa_direct', {
+                p_email: newEmpresaData.email,
+                p_password: newEmpresaData.password,
+                p_razao_social: newEmpresaData.razao_social,
+                p_cnpj: newEmpresaData.cnpj
+            });
+
             if (error) throw error;
+            if (data && !data.success) throw new Error(data.message);
+
             setShowNewEmpresaModal(false);
             setNewEmpresaData({ razao_social: '', cnpj: '', email: '', password: '' });
             carregarTodasEmpresas();
-            notify('Convite enviado!', 'success');
-        } catch (err) { notify('Erro ao criar empresa: ' + err.message, 'error'); }
-        finally { setCreatingEmpresa(false); }
+            notify('Empresa criada e conta ATIVA!', 'success');
+        } catch (err) { 
+            notify('Erro ao criar empresa: ' + err.message, 'error'); 
+        } finally { 
+            setCreatingEmpresa(false); 
+        }
     };
 
     // UI HELPER
@@ -812,79 +954,117 @@ export default function AdminDashboard() {
             </Navbar>
 
             <div className="container" style={{ marginTop: '2rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-                    {TABS.map(t => (
-                        <button key={t.id} onClick={() => setActiveTab(t.id)} className="neon-button" style={tabStyle(t.id)}>
-                            <t.icon size={16} /> {t.label}
-                        </button>
-                    ))}
+                {/* NAVEGAÇÃO POR TABS ESTILIZADA (Substitui o menu antigo) */}
+                <div style={{ 
+                    display: 'flex', 
+                    gap: isMobile ? '4px' : '8px', 
+                    marginBottom: '2rem', 
+                    flexWrap: isMobile ? 'nowrap' : 'wrap', 
+                    background: 'rgba(255,255,255,0.02)', 
+                    padding: '8px', 
+                    borderRadius: '16px',
+                    overflowX: isMobile ? 'auto' : 'visible',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    WebkitOverflowScrolling: 'touch'
+                }} className="tabs-row">
+                    {TABS.map(tab => {
+                        const Icon = tab.icon;
+                        const active = activeTab === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: isMobile ? '6px' : '10px',
+                                    padding: isMobile ? '8px 12px' : '12px 20px',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    background: active ? 'var(--norte-green)' : 'transparent',
+                                    color: active ? '#fff' : 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.3s ease',
+                                    fontWeight: 600,
+                                    fontSize: isMobile ? '0.75rem' : '0.9rem',
+                                    whiteSpace: 'nowrap',
+                                    boxShadow: active ? '0 4px 15px rgba(0, 141, 76, 0.3)' : 'none'
+                                }}
+                            >
+                                <Icon size={isMobile ? 16 : 18} />
+                                {tab.label}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {activeTab === 'visao' && (
                     <div className="glass-panel animation-fade-in">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                            <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>📊 Dashboard de Performance</h2>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem', flexDirection: isMobile ? 'column' : 'row' }}>
+                            <h2 style={{ color: 'var(--neon-blue)', margin: 0, fontSize: isMobile ? '1.3rem' : '1.8rem' }}>📊 Dashboard de Performance</h2>
                             
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(34, 197, 94, 0.1)', padding: '6px 14px', borderRadius: '20px', border: '1px solid rgba(34,197,94,0.3)' }}>
                                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e', animation: 'pulse 2s infinite' }}></div>
-                                    <span style={{ color: '#22c55e', fontWeight: 600, fontSize: '0.9rem' }}>{ativosAgora} Simultâneos</span>
+                                    <span style={{ color: '#22c55e', fontWeight: 600, fontSize: '0.8rem' }}>{ativosAgora} {isMobile ? 'On' : 'Simultâneos'}</span>
                                 </div>
+                                
+                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <select className="neon-input" value={diasFiltro} onChange={e => setDiasFiltro(e.target.value)} style={{ width: 'auto', marginBottom: 0, padding: '8px 12px', height: '38px', fontSize: '0.85rem' }}>
+                                        <option value="hoje">Hoje</option>
+                                        <option value="ontem">Ontem</option>
+                                        <option value="3">3 dias</option>
+                                        <option value="7">7 dias</option>
+                                        <option value="14">14 dias</option>
+                                        <option value="custom">Personalizado</option>
+                                    </select>
 
-                                <select className="neon-input" value={diasFiltro} onChange={e => setDiasFiltro(e.target.value)} style={{ width: 'auto', marginBottom: 0, padding: '8px 16px', height: 'auto' }}>
-                                    <option value="hoje">Hoje</option>
-                                    <option value="ontem">Ontem</option>
-                                    <option value="3">Último 3 dias</option>
-                                    <option value="7">Últimos 7 dias</option>
-                                    <option value="14">Últimos 14 dias</option>
-                                    <option value="custom">Personalizado</option>
-                                </select>
-
-                                {diasFiltro === 'custom' && (
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '4px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                        <input type="date" value={customDates.start} onChange={e => setCustomDates(p => ({...p, start: e.target.value}))} className="neon-input" style={{ width: 'auto', marginBottom: 0, padding: '4px', fontSize: '0.8rem' }} />
-                                        <span style={{ fontSize: '0.8rem' }}>até</span>
-                                        <input type="date" value={customDates.end} onChange={e => setCustomDates(p => ({...p, end: e.target.value}))} className="neon-input" style={{ width: 'auto', marginBottom: 0, padding: '4px', fontSize: '0.8rem' }} />
-                                    </div>
-                                )}
+                                    {diasFiltro === 'custom' && (
+                                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                            <input type="date" value={customDates.start} onChange={e => setCustomDates(p => ({...p, start: e.target.value}))} className="neon-input" style={{ width: '100px', marginBottom: 0, padding: '4px', fontSize: '0.75rem' }} />
+                                            <input type="date" value={customDates.end} onChange={e => setCustomDates(p => ({...p, end: e.target.value}))} className="neon-input" style={{ width: '100px', marginBottom: 0, padding: '4px', fontSize: '0.75rem' }} />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
                         {loading ? <p>Carregando métricas...</p> : (
                             <>
                                 {/* STATS GLOBAIS (ESTILO ANTIGO MELHORADO) */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                                    <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', textAlign: 'center' }}>
-                                        <div style={{ color: 'var(--neon-blue)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Total Candidatos</div>
-                                        <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.candidatos}</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: isMobile ? '0.75rem' : '1rem', marginBottom: '2rem' }}>
+                                    <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', textAlign: 'center' }}>
+                                        <div style={{ color: 'var(--neon-blue)', fontSize: isMobile ? '0.65rem' : '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Candidatos</div>
+                                        <div style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: 800 }}>{stats.candidatos}</div>
                                     </div>
-                                    <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(168, 85, 247, 0.2)', textAlign: 'center' }}>
-                                        <div style={{ color: 'var(--neon-purple)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Parceiros</div>
-                                        <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.empresas}</div>
+                                    <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '12px', border: '1px solid rgba(168, 85, 247, 0.2)', textAlign: 'center' }}>
+                                        <div style={{ color: 'var(--neon-purple)', fontSize: isMobile ? '0.65rem' : '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Parceiros</div>
+                                        <div style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: 800 }}>{stats.empresas}</div>
                                     </div>
-                                    <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.2)', textAlign: 'center' }}>
-                                        <div style={{ color: '#4ade80', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Perfis Salvos</div>
-                                        <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.perfisCompletos}</div>
+                                    <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '12px', border: '1px solid rgba(34, 197, 94, 0.2)', textAlign: 'center' }}>
+                                        <div style={{ color: '#4ade80', fontSize: isMobile ? '0.65rem' : '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Perfis Salvos</div>
+                                        <div style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: 800 }}>{stats.perfisCompletos}</div>
                                     </div>
-                                    <div style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(251, 191, 36, 0.2)', textAlign: 'center' }}>
-                                        <div style={{ color: '#fbbf24', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Vagas Ativas</div>
-                                        <div style={{ fontSize: '2rem', fontWeight: 800 }}>{vagasList.filter(v => v.status === 'aberta').length}</div>
+                                    <div style={{ background: 'rgba(251, 191, 36, 0.1)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '12px', border: '1px solid rgba(251, 191, 36, 0.2)', textAlign: 'center' }}>
+                                        <div style={{ color: '#fbbf24', fontSize: isMobile ? '0.65rem' : '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Vagas Ativas</div>
+                                        <div style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: 800 }}>{vagasList.filter(v => v.status === 'aberta').length}</div>
                                     </div>
-                                    <div style={{ background: 'rgba(124, 58, 237, 0.1)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.2)', textAlign: 'center', boxShadow: '0 0 20px rgba(124, 58, 237, 0.1)' }}>
-                                        <div style={{ color: 'var(--neon-purple)', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>🚀 Vidas Impactadas</div>
-                                        <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.contratados}</div>
+                                    <div style={{ background: 'rgba(124, 58, 237, 0.1)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.2)', textAlign: 'center', gridColumn: isMobile ? 'span 2' : 'auto' }}>
+                                        <div style={{ color: 'var(--neon-purple)', fontSize: isMobile ? '0.65rem' : '0.8rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>🚀 Vidas Impactadas</div>
+                                        <div style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: 800 }}>{stats.contratados}</div>
                                     </div>
                                 </div>
 
                                 {/* [NEW] GRÁFICO DE TENDÊNCIA */}
-                                <TrendChart data={trendData} />
+                                <TrendChart data={trendData} isMobile={isMobile} />
 
                                 {/* FUNIL DE CONVERSÃO VISUAL */}
                                 <div style={{ marginTop: '3rem', marginBottom: '2rem' }}>
-                                    <h3 style={{ color: 'var(--neon-blue)', fontSize: '1rem', marginBottom: '1.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>📊 Inteligência do Funil (Conversão)</h3>
+                                    <h3 style={{ color: 'var(--neon-blue)', fontSize: isMobile ? '0.85rem' : '1rem', marginBottom: '1.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>📊 Inteligência do Funil (Conversão)</h3>
                                     
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '2rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: isMobile ? '1rem' : '2rem', alignItems: 'center' }}>
+                                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: isMobile ? '1rem' : '2rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
                                             {/* Camada 1: Visitantes */}
                                             <div style={{ marginBottom: '1.5rem' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
@@ -960,19 +1140,19 @@ export default function AdminDashboard() {
                                 </div>
 
                                 {/* RETENCAO E ATIVOS */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
-                                    <div style={{ background: '#fffbeb', padding: '1.5rem', borderRadius: '12px', border: '1px solid #fef3c7', display: 'flex', alignItems: 'center', gap: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-                                        <div style={{ background: '#fef3c7', padding: '15px', borderRadius: '12px' }}><Clock color="#d97706" size={32} /></div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+                                    <div style={{ background: '#fffbeb', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '12px', border: '1px solid #fef3c7', display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                                        <div style={{ background: '#fef3c7', padding: isMobile ? '10px' : '15px', borderRadius: '12px' }}><Clock color="#d97706" size={isMobile ? 24 : 32} /></div>
                                         <div>
-                                            <p style={{ margin: 0, color: '#92400e', fontSize: '0.85rem', fontWeight: 600 }}>DAU (Contas Ativas Diárias)</p>
-                                            <h3 style={{ margin: '5px 0 0', fontSize: '1.8rem', color: '#78350f' }}>{metricasTempo?.dau || 0}</h3>
+                                            <p style={{ margin: 0, color: '#92400e', fontSize: '0.75rem', fontWeight: 600 }}>DAU (Contas Ativas Diárias)</p>
+                                            <h3 style={{ margin: '5px 0 0', fontSize: isMobile ? '1.5rem' : '1.8rem', color: '#78350f' }}>{metricasTempo?.dau || 0}</h3>
                                         </div>
                                     </div>
-                                    <div style={{ background: '#f0fdf4', padding: '1.5rem', borderRadius: '12px', border: '1px solid #dcfce7', display: 'flex', alignItems: 'center', gap: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-                                        <div style={{ background: '#dcfce7', padding: '15px', borderRadius: '12px' }}><Activity color="#16a34a" size={32} /></div>
+                                    <div style={{ background: '#f0fdf4', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '12px', border: '1px solid #dcfce7', display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                                        <div style={{ background: '#dcfce7', padding: isMobile ? '10px' : '15px', borderRadius: '12px' }}><Activity color="#16a34a" size={isMobile ? 24 : 32} /></div>
                                         <div>
-                                            <p style={{ margin: 0, color: '#166534', fontSize: '0.85rem', fontWeight: 600 }}>WAU (Contas Ativas Semanais)</p>
-                                            <h3 style={{ margin: '5px 0 0', fontSize: '1.8rem', color: '#14532d' }}>{metricasTempo?.wau || 0}</h3>
+                                            <p style={{ margin: 0, color: '#166534', fontSize: '0.75rem', fontWeight: 600 }}>WAU (Contas Ativas Semanais)</p>
+                                            <h3 style={{ margin: '5px 0 0', fontSize: isMobile ? '1.5rem' : '1.8rem', color: '#14532d' }}>{metricasTempo?.wau || 0}</h3>
                                         </div>
                                     </div>
                                 </div>
@@ -983,21 +1163,21 @@ export default function AdminDashboard() {
 
                 {activeTab === 'usuarios' && (
                     <div className="glass-panel animation-fade-in">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem', flexDirection: isMobile ? 'column' : 'row' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>👥 Base de Candidatos</h2>
-                                <span style={{ background: 'rgba(56, 189, 248, 0.1)', color: 'var(--neon-blue)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>
+                                <h2 style={{ color: 'var(--neon-blue)', margin: 0, fontSize: isMobile ? '1.2rem' : '1.8rem' }}>👥 Base de Candidatos</h2>
+                                <span style={{ background: 'rgba(56, 189, 248, 0.1)', color: 'var(--neon-blue)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800 }}>
                                     {totalCand} TOTAL
                                 </span>
                             </div>
                             
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, maxWidth: '600px', justifyContent: 'flex-end' }}>
-                                <div style={{ position: 'relative', flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, width: '100%', justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
+                                <div style={{ position: 'relative', flex: 1, maxWidth: isMobile ? '100%' : '400px' }}>
                                     <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                                     <input 
                                         className="neon-input" 
-                                        placeholder="Buscar candidato por nome..." 
-                                        style={{ paddingLeft: '40px', marginBottom: 0 }}
+                                        placeholder="Buscar por nome..." 
+                                        style={{ paddingLeft: '40px', marginBottom: 0, width: '100%' }}
                                         value={searchCand}
                                         onChange={(e) => {
                                             setSearchCand(e.target.value);
@@ -1007,12 +1187,6 @@ export default function AdminDashboard() {
                                 </div>
                                 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <button onClick={() => {
-                                        const sorter = [...usuariosList].sort((a,b) => a.total_candidaturas - b.total_candidaturas);
-                                        setUsuariosList(sorter);
-                                    }} className="neon-button secondary" title="Menos Inscritos" style={{ margin: 0, padding: '8px', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--norte-green)' }}>
-                                        <Filter size={16} color="currentColor" />
-                                    </button>
                                     <button onClick={carregarUsuarios} className="neon-button secondary" style={{ margin: 0, padding: '8px', width: '38px', height: '38px' }}>
                                         <RefreshCw size={16} className={loading ? 'spin' : ''} />
                                     </button>
@@ -1022,48 +1196,62 @@ export default function AdminDashboard() {
 
                         {loading ? <p>Carregando usuários...</p> : (
                             <div className="table-responsive">
-                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                                    <thead style={{ background: '#f8fafc', color: '#475569' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
+                                    <thead style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
                                         <tr>
-                                            <th style={{ padding: '15px' }}>Nome</th>
-                                            <th style={{ padding: '15px' }}>Gênero</th>
-                                            <th style={{ padding: '15px' }}>Contato</th>
-                                            <th style={{ padding: '15px' }}>Vagas Inscritas</th>
-                                            <th style={{ padding: '15px' }}>Completude</th>
-                                            <th style={{ padding: '15px' }}>Último Acesso</th>
+                                            <th style={{ padding: '15px' }}>Nome / Contato</th>
+                                            {!isMobile && <th style={{ padding: '15px' }}>Gênero</th>}
+                                            <th style={{ padding: '15px', textAlign: 'center' }}>Vagas</th>
+                                            <th style={{ padding: '15px', textAlign: 'center' }}>Perfil</th>
+                                            {!isMobile && <th style={{ padding: '15px' }}>Último Acesso</th>}
                                             <th style={{ padding: '15px' }}>Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {usuariosList.map(u => (
-                                            <tr key={u.user_id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                                                <td style={{ padding: '15px', fontWeight: 600 }} data-label="NOME">{u.nome}</td>
-                                                <td style={{ padding: '15px' }} data-label="GÊNERO">{u.genero || '—'}</td>
-                                                <td style={{ padding: '15px', color: '#64748b' }} data-label="CONTATO">{u.email}<br/>{u.telefone}</td>
-                                                <td style={{ padding: '15px' }} data-label="VAGAS">
-                                                    <span style={{ 
-                                                        padding: '4px 10px', 
-                                                        borderRadius: '20px', 
-                                                        fontSize: '0.85rem', 
-                                                        fontWeight: 700,
-                                                        background: u.total_candidaturas === 0 ? '#fee2e2' : '#f0f9ff',
-                                                        color: u.total_candidaturas === 0 ? '#ef4444' : '#0284c7'
-                                                    }}>
-                                                        {u.total_candidaturas} {u.total_candidaturas === 1 ? 'vaga' : 'vagas'}
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '15px' }} data-label="PERFIL">
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: isMobile ? 'flex-end' : 'flex-start' }}>
-                                                        <div style={{ width: '80px', height: '8px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
-                                                            <div style={{ width: `${u.completude}%`, height: '100%', background: u.completude >= 80 ? '#22c55e' : (u.completude >= 40 ? '#eab308' : '#ef4444') }}></div>
-                                                        </div>
-                                                        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{u.completude}%</span>
+                                            <tr key={u.user_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <td style={{ padding: '15px' }}>
+                                                    <div style={{ fontWeight: 700 }}>{u.nome || 'Sem Nome'}</div>
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Mail size={10} /> {u.email}
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '15px', color: '#64748b' }} data-label="ÚLTIMO">{new Date(u.updated_at).toLocaleDateString()}</td>
-                                                <td style={{ padding: '15px', gap: '8px', display: 'flex' }} className="actions-cell">
-                                                    <button onClick={() => navigate(`/cv-preview/${u.user_id}`)} className="neon-button secondary" style={{ margin: 0, padding: '6px 12px', fontSize: '0.75rem', width: 'auto' }}>Ver CV</button>
-                                                    <button className="neon-button error" style={{ margin: 0, padding: '6px 12px', fontSize: '0.75rem', width: 'auto', background: '#fee2e2', color: '#ef4444', border: '1px solid #ef4444' }}>Bloquear</button>
+                                                {!isMobile && <td style={{ padding: '15px' }}>{u.genero || '—'}</td>}
+                                                <td style={{ padding: '15px', textAlign: 'center' }}>
+                                                    <span style={{ 
+                                                        padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800,
+                                                        background: u.total_candidaturas > 0 ? 'rgba(56, 189, 248, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                        color: u.total_candidaturas > 0 ? 'var(--neon-blue)' : '#ef4444'
+                                                    }}>
+                                                        {u.total_candidaturas}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '15px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                                                        <div style={{ width: isMobile ? '40px' : '60px', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                                                            <div style={{ width: `${u.completude}%`, height: '100%', background: u.completude >= 80 ? '#22c55e' : (u.completude >= 40 ? '#eab308' : '#ef4444') }}></div>
+                                                        </div>
+                                                        {!isMobile && <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{u.completude}%</span>}
+                                                    </div>
+                                                </td>
+                                                {!isMobile && <td style={{ padding: '15px', color: 'var(--text-muted)' }}>{new Date(u.updated_at).toLocaleDateString()}</td>}
+                                                <td style={{ padding: '15px', gap: '6px', display: 'flex' }}>
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (u.telefone) window.open(`https://wa.me/55${u.telefone.replace(/\D/g, '')}`, '_blank');
+                                                        }} 
+                                                        className="neon-button secondary" 
+                                                        style={{ margin: 0, padding: '4px 8px', fontSize: '0.7rem', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: '1px solid #22c55e' }}
+                                                        disabled={!u.telefone}
+                                                    >
+                                                        <Send size={14} />
+                                                    </button>
+                                                    <button onClick={() => window.open(`/cv-preview/${u.user_id}`, '_blank')} className="neon-button secondary" style={{ margin: 0, padding: '4px 10px', fontSize: '0.7rem', width: 'auto' }}>
+                                                        {isMobile ? 'CV' : 'VER CV'}
+                                                    </button>
+                                                    <button className="neon-button error" style={{ margin: 0, padding: '8px', fontSize: '0.7rem', width: 'auto', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444' }}>
+                                                        <Trash2 size={14}/>
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -1121,101 +1309,106 @@ export default function AdminDashboard() {
                     <div className="glass-panel animation-fade-in">
                         <h2 style={{ color: 'var(--neon-blue)', marginBottom: '1.5rem' }}>💼 Gerenciamento de Vagas</h2>
                         {loading ? <p>Carregando vagas...</p> : (
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                                <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
-                                    <tr>
-                                        <th style={{ padding: '12px' }}>Empresa / Vaga</th>
-                                        <th style={{ padding: '12px' }}>Publicada em</th>
-                                        <th style={{ padding: '12px' }}>Status</th>
-                                        <th style={{ padding: '12px' }}>Candidatos</th>
-                                        <th style={{ padding: '12px' }}>Ações Administrativas</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {vagasList.map(v => (
-                                        <tr key={v.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                            <td style={{ padding: '12px' }}>
-                                                <strong>{v.empresas?.razao_social || 'Desconhecida'}</strong>
-                                                <div style={{ color: 'var(--text-muted)' }}>{v.titulo}</div>
-                                            </td>
-                                            <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{new Date(v.created_at).toLocaleDateString()}</td>
-                                            <td style={{ padding: '12px' }}>
-                                                <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', 
-                                                    background: v.status === 'aberta' ? 'rgba(0,240,255,0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                                    color: v.status === 'aberta' ? 'var(--neon-blue)' : '#ef4444' }}>
-                                                    {v.status.toUpperCase()}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '12px', fontWeight: 'bold' }}>{v.candidaturas?.[0]?.count || 0}</td>
-                                            <td style={{ padding: '12px', gap: '8px', display: 'flex' }}>
-                                                {v.status === 'aberta' ? (
-                                                    <button onClick={() => handleAcaoVaga(v.id, 'suspensa')} className="neon-button secondary" style={{ margin: 0, padding: '4px 10px', fontSize: '0.75rem', width: 'auto' }}>Suspender Vaga</button>
-                                                ) : (
-                                                    <button onClick={() => handleAcaoVaga(v.id, 'aberta')} className="neon-button secondary" style={{ margin: 0, padding: '4px 10px', fontSize: '0.75rem', width: 'auto' }}>Reabrir</button>
-                                                )}
-                                                <button className="neon-button error" style={{ margin: 0, padding: '4px 10px', fontSize: '0.75rem', width: 'auto', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444' }}><Trash2 size={12}/></button>
-                                            </td>
+                            <div className="table-responsive">
+                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                                    <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
+                                        <tr>
+                                            <th style={{ padding: '12px' }}>Empresa / Vaga</th>
+                                            {!isMobile && <th style={{ padding: '12px' }}>Publicada em</th>}
+                                            <th style={{ padding: '12px' }}>Status</th>
+                                            <th style={{ padding: '12px', textAlign: 'center' }}>Cands</th>
+                                            <th style={{ padding: '12px' }}>Ações</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {vagasList.map(v => (
+                                            <tr key={v.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <td style={{ padding: '12px' }}>
+                                                    <strong>{v.empresas?.razao_social || 'Desconhecida'}</strong>
+                                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{v.titulo}</div>
+                                                </td>
+                                                {!isMobile && <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{new Date(v.created_at).toLocaleDateString()}</td>}
+                                                <td style={{ padding: '12px' }}>
+                                                    <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '0.7rem', 
+                                                        background: v.status === 'aberta' ? 'rgba(0,240,255,0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                        color: v.status === 'aberta' ? 'var(--neon-blue)' : '#ef4444' }}>
+                                                        {v.status.toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '12px', fontWeight: 'bold', textAlign: 'center' }}>{v.candidaturas?.[0]?.count || 0}</td>
+                                                <td style={{ padding: '12px', gap: '4px', display: 'flex' }}>
+                                                    {v.status === 'aberta' ? (
+                                                        <button onClick={() => handleAcaoVaga(v.id, 'suspensa')} className="neon-button secondary" style={{ margin: 0, padding: '4px 8px', fontSize: '0.7rem', width: 'auto' }}>Suspender</button>
+                                                    ) : (
+                                                        <button onClick={() => handleAcaoVaga(v.id, 'aberta')} className="neon-button secondary" style={{ margin: 0, padding: '4px 8px', fontSize: '0.7rem', width: 'auto' }}>Liberar</button>
+                                                    )}
+                                                    <button className="neon-button error" style={{ margin: 0, padding: '6px', fontSize: '0.7rem', width: 'auto', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444' }}><Trash2 size={14}/></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
                 )}
 
                 {activeTab === 'automacao' && (
                     <div className="glass-panel animation-fade-in">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1.5rem', flexDirection: isMobile ? 'column' : 'row' }}>
                             <div>
-                                <h2 style={{ color: 'var(--neon-purple)', margin: 0 }}>⚡ Inteligência de Automação</h2>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Monitoramento em tempo real dos disparos de e-mail e retenção.</p>
+                                <h2 style={{ color: 'var(--neon-purple)', margin: 0, fontSize: isMobile ? '1.2rem' : '1.8rem' }}>⚡ Inteligência de Automação</h2>
+                                <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.9rem' }}>Monitoramento em tempo real dos disparos de e-mail e retenção.</p>
                             </div>
                             
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
                                 <button 
                                     onClick={handleDisparoRecuperacao} 
                                     disabled={isSendingEmails}
                                     className="neon-button" 
                                     style={{ 
-                                        width: 'auto', margin: 0, padding: '8px 20px', 
+                                        width: isMobile ? '100%' : 'auto', margin: 0, padding: isMobile ? '10px 15px' : '8px 20px', 
                                         background: 'linear-gradient(90deg, #f59e0b, #ef4444)',
                                         borderColor: '#f59e0b',
+                                        fontSize: isMobile ? '0.75rem' : '0.85rem',
                                         opacity: isSendingEmails ? 0.7 : 1
                                     }}
                                 >
                                     {isSendingEmails ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
                                             <RefreshCw size={14} className="spin" /> {sendProgress}
                                         </div>
                                     ) : (
                                         '🚀 DISPARAR RECUPERAÇÃO (2 dias)'
                                     )}
                                 </button>
-                                <select className="neon-input" value={filtroAutomacao} onChange={e => setFiltroAutomacao(Number(e.target.value))} style={{ width: 'auto', marginBottom: 0, padding: '8px 16px', height: 'auto' }}>
-                                    <option value={1}>Hoje</option>
-                                    <option value={3}>Últimos 3 dias</option>
-                                    <option value={7}>Últimos 7 dias</option>
-                                    <option value={14}>Últimos 14 dias</option>
-                                </select>
-                                <button onClick={carregarAutomacao} className="neon-button secondary" style={{ width: 'auto', margin: 0 }}>
-                                    <RefreshCw size={16} /> ATUALIZAR
-                                </button>
+                                <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
+                                    <select className="neon-input" value={filtroAutomacao} onChange={e => setFiltroAutomacao(Number(e.target.value))} style={{ flex: 1, marginBottom: 0, padding: '8px', height: '40px', fontSize: '0.8rem' }}>
+                                        <option value={1}>Hoje</option>
+                                        <option value={3}>3 dias</option>
+                                        <option value={7}>7 dias</option>
+                                        <option value={14}>14 dias</option>
+                                    </select>
+                                    <button onClick={carregarAutomacao} className="neon-button secondary" style={{ width: 'auto', margin: 0, padding: '0 15px', height: '40px' }}>
+                                        <RefreshCw size={16} /> {isMobile ? '' : 'ATUALIZAR'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
                         {/* NOVO: BANNER DE BROADCAST DE VAGAS */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                             {/* BROADCAST GERAL */}
                             <div style={{ 
                                 background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(56, 189, 248, 0.1))',
-                                padding: '1.5rem', borderRadius: '16px',
+                                padding: isMobile ? '1.2rem' : '1.5rem', borderRadius: '16px',
                                 border: '1px solid rgba(124, 58, 237, 0.2)',
-                                display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.5rem'
+                                display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem'
                             }}>
                                 <div>
-                                    <h3 style={{ margin: 0, color: '#fff', fontSize: '1.1rem' }}>📣 Divulgar Novas Vagas (Geral)</h3>
-                                    <p style={{ margin: '5px 0 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                                        Envia um e-mail para <strong>toda a base de candidatos</strong> convidando-os a ver as oportunidades atuais.
+                                    <h3 style={{ margin: 0, color: '#fff', fontSize: isMobile ? '1rem' : '1.1rem' }}>📣 Divulgar Novas Vagas (Geral)</h3>
+                                    <p style={{ margin: '5px 0 0 0', color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
+                                        Envia um e-mail para <strong>toda a base</strong> convidando-os a ver as oportunidades.
                                     </p>
                                 </div>
                                 <button 
@@ -1223,9 +1416,9 @@ export default function AdminDashboard() {
                                     disabled={isSendingBroadcast}
                                     className="neon-button" 
                                     style={{ 
-                                        width: '100%', margin: 0, padding: '10px 24px', 
+                                        width: '100%', margin: 0, padding: '10px', 
                                         background: 'var(--neon-purple)', color: '#fff',
-                                        fontWeight: 800, fontSize: '0.9rem',
+                                        fontWeight: 800, fontSize: isMobile ? '0.75rem' : '0.9rem',
                                         boxShadow: '0 0 15px rgba(124, 58, 237, 0.4)'
                                     }}
                                 >
@@ -1242,14 +1435,14 @@ export default function AdminDashboard() {
                             {/* BROADCAST SEM INSCRIÇÃO */}
                             <div style={{ 
                                 background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(34, 197, 94, 0.1))',
-                                padding: '1.5rem', borderRadius: '16px',
+                                padding: isMobile ? '1.2rem' : '1.5rem', borderRadius: '16px',
                                 border: '1px solid rgba(56, 189, 248, 0.2)',
-                                display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.5rem'
+                                display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem'
                             }}>
                                 <div>
-                                    <h3 style={{ margin: 0, color: '#fff', fontSize: '1.1rem' }}>🎯 Recuperar Sem Inscrição</h3>
-                                    <p style={{ margin: '5px 0 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                                        Foca apenas nos candidatos que <strong>ainda não se candidataram</strong> a nenhuma das vagas do sistema.
+                                    <h3 style={{ margin: 0, color: '#fff', fontSize: isMobile ? '1rem' : '1.1rem' }}>🎯 Recuperar Sem Inscrição</h3>
+                                    <p style={{ margin: '5px 0 0 0', color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
+                                        Foca nos candidatos que <strong>ainda não se candidataram</strong> a nenhuma vaga.
                                     </p>
                                 </div>
                                 <button 
@@ -1257,9 +1450,9 @@ export default function AdminDashboard() {
                                     disabled={isSendingBroadcast}
                                     className="neon-button" 
                                     style={{ 
-                                        width: '100%', margin: 0, padding: '10px 24px', 
+                                        width: '100%', margin: 0, padding: '10px', 
                                         background: 'var(--neon-blue)', color: '#000',
-                                        fontWeight: 800, fontSize: '0.9rem',
+                                        fontWeight: 800, fontSize: isMobile ? '0.75rem' : '0.9rem',
                                         boxShadow: '0 0 15px rgba(0, 240, 255, 0.3)'
                                     }}
                                 >
@@ -1274,59 +1467,94 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
+                            {/* CARD DE TESTE DE NOTIFICAÇÕES (APENAS DAVID) */}
+                            {isDavidAdmin && (
+                                <div className="glass-panel" style={{ 
+                                    border: '1px solid var(--neon-blue)', 
+                                    background: 'rgba(0, 240, 255, 0.05)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '12px',
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div style={{ position: 'absolute', top: '-10px', right: '-10px', opacity: 0.1 }}>
+                                        <Shield size={80} color="var(--neon-blue)" />
+                                    </div>
+                                    <h4 style={{ margin: 0, color: 'var(--neon-blue)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Send size={16} /> TESTE DE SISTEMA
+                                    </h4>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        David, use este botão para validar as **Notificações do Navegador** no seu dispositivo.
+                                    </p>
+                                    <button 
+                                        onClick={handleTesteNotificacao}
+                                        className="neon-button" 
+                                        style={{ margin: 0, padding: '8px', fontSize: '0.8rem', background: 'var(--neon-blue)', color: '#000' }}
+                                    >
+                                        {notifPermission === 'granted' ? '🔔 ENVIAR NOTIFICAÇÃO TESTE' : '🔕 ATIVAR NOTIFICAÇÕES'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
                         {loading ? <p>Carregando estatísticas...</p> : (
                             <>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
-                                    <div style={{ background: 'rgba(168, 85, 247, 0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+                                    <div style={{ background: 'rgba(168, 85, 247, 0.05)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '16px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
                                         <div style={{ color: 'var(--neon-purple)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px' }}>E-mails Enviados</div>
-                                        <div style={{ fontSize: '2.5rem', fontWeight: 900 }}>{automationStats.sent}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>Total acumulado hoje</div>
+                                        <div style={{ fontSize: isMobile ? '1.8rem' : '2.5rem', fontWeight: 900 }}>{automationStats.sent}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>Total hoje</div>
                                     </div>
-                                    <div style={{ background: 'rgba(34, 197, 94, 0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                                        <div style={{ color: '#4ade80', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px' }}>Taxa de Abertura</div>
-                                        <div style={{ fontSize: '2.5rem', fontWeight: 900 }}>
+                                    <div style={{ background: 'rgba(34, 197, 94, 0.05)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '16px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                                        <div style={{ color: '#4ade80', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px' }}>Taxa Abertura</div>
+                                        <div style={{ fontSize: isMobile ? '1.8rem' : '2.5rem', fontWeight: 900 }}>
                                             {automationStats.sent > 0 ? Math.round((automationStats.opened / automationStats.sent) * 100) : 0}%
                                         </div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>{automationStats.opened} aberturas confirmadas</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>{automationStats.opened} aberturas</div>
                                     </div>
-                                    <div style={{ background: 'rgba(56, 189, 248, 0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
-                                        <div style={{ color: 'var(--neon-blue)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px' }}>Candidatos Recuperados</div>
-                                        <div style={{ fontSize: '2.5rem', fontWeight: 900 }}>{automationStats.recovered}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>Completaram o CV após e-mail</div>
+                                    <div style={{ background: 'rgba(56, 189, 248, 0.05)', padding: isMobile ? '1rem' : '1.5rem', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+                                        <div style={{ color: 'var(--neon-blue)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '10px' }}>Recuperados</div>
+                                        <div style={{ fontSize: isMobile ? '1.8rem' : '2.5rem', fontWeight: 900 }}>{automationStats.recovered}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px' }}>Completaram CV</div>
                                     </div>
                                 </div>
 
-                                <h3 style={{ marginBottom: '1.5rem' }}>🎯 Últimos Disparos</h3>
+                                <h3 style={{ marginBottom: '1.5rem', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>🎯 Últimos Disparos</h3>
                                         <div className="table-responsive">
-                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
                                                 <thead>
                                                     <tr style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)' }}>
                                                         <th style={{ padding: '12px' }}>Candidato</th>
-                                                        <th style={{ padding: '12px' }}>Gatilho</th>
+                                                        {!isMobile && <th style={{ padding: '12px' }}>Gatilho</th>}
                                                         <th style={{ padding: '12px' }}>Status</th>
-                                                        <th style={{ padding: '12px' }}>Enviado em</th>
+                                                        <th style={{ padding: '12px' }}>Data</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {recentNotifications.map(n => (
                                                         <tr key={n.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                            <td style={{ padding: '12px', fontWeight: 600 }} data-label="E-MAIL">{n.candidato_email || 'Usuário'}</td>
-                                                            <td style={{ padding: '12px' }} data-label="TIPO">
+                                                            <td style={{ padding: '12px', maxWidth: isMobile ? '130px' : 'none', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                <div style={{ fontWeight: 600 }}>{n.candidato_email || 'Usuário'}</div>
+                                                                {isMobile && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{n.tipo === 'sem_curriculo' ? '📝 Cadastro' : '💼 Vagas'}</div>}
+                                                            </td>
+                                                            {!isMobile && <td style={{ padding: '12px' }}>
                                                                 <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }}>
                                                                     {n.tipo === 'sem_curriculo' ? '📝 Cadastro' : '💼 Vagas'}
                                                                 </span>
-                                                            </td>
-                                                            <td style={{ padding: '12px' }} data-label="STATUS">
+                                                            </td>}
+                                                            <td style={{ padding: '12px' }}>
                                                                 <span style={{ 
                                                                     color: n.status === 'opened' ? '#4ade80' : (n.status === 'clicked' ? 'var(--neon-blue)' : 'var(--text-muted)'),
-                                                                    display: 'flex', alignItems: 'center', gap: '5px', justifyContent: isMobile ? 'flex-end' : 'flex-start'
+                                                                    display: 'flex', alignItems: 'center', gap: '5px'
                                                                 }}>
                                                                     {n.status === 'opened' && <CheckCircle size={14} />}
                                                                     {n.status === 'clicked' && <Activity size={14} />}
                                                                     {n.status.toUpperCase()}
                                                                 </span>
                                                             </td>
-                                                            <td style={{ padding: '12px', color: 'var(--text-muted)' }} data-label="DATA">{new Date(n.enviado_em).toLocaleDateString()}</td>
+                                                            <td style={{ padding: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(n.enviado_em).toLocaleDateString()}</td>
                                                         </tr>
                                                     ))}
                                                     {recentNotifications.length === 0 && (
@@ -1340,54 +1568,168 @@ export default function AdminDashboard() {
                     </div>
                 )}
 
+                {activeTab === 'notificacoes' && (
+                    <div className="glass-panel animation-fade-in">
+                        <div style={{ marginBottom: '2rem' }}>
+                            <h2 style={{ color: 'var(--neon-blue)', margin: 0, fontSize: isMobile ? '1.2rem' : '1.8rem' }}>🔔 Central de Notificações Push</h2>
+                            <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.9rem' }}>Dispare alertas em tempo real diretamente para o navegador dos usuários.</p>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 350px', gap: '2rem' }}>
+                            <div className="glass-panel" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                                <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem', color: '#fff' }}>Criar Nova Notificação</h3>
+                                <form onSubmit={handleBroadcastPush} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Título da Notificação</label>
+                                        <input 
+                                            type="text" 
+                                            className="neon-input" 
+                                            placeholder="Ex: 🚀 5 Novas Vagas em Manaus!" 
+                                            value={pushTitle}
+                                            onChange={e => setPushTitle(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Mensagem (Corpo)</label>
+                                        <textarea 
+                                            className="neon-input" 
+                                            placeholder="Ex: Confira as novas oportunidades de Engenharia que acabaram de ser publicadas no portal." 
+                                            style={{ minHeight: '100px', resize: 'vertical' }}
+                                            value={pushBody}
+                                            onChange={e => setPushBody(e.target.value)}
+                                            required
+                                        ></textarea>
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Link de Destino (URL)</label>
+                                        <input 
+                                            type="text" 
+                                            className="neon-input" 
+                                            placeholder="/vagas" 
+                                            value={pushUrl}
+                                            onChange={e => setPushUrl(e.target.value)}
+                                        />
+                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>O usuário será levado para cá ao clicar.</span>
+                                    </div>
+
+                                    <button 
+                                        type="submit" 
+                                        disabled={isSendingPush || pushSubscribers === 0}
+                                        className="neon-button" 
+                                        style={{ 
+                                            marginTop: '1rem', 
+                                            background: 'var(--neon-blue)', 
+                                            color: '#000',
+                                            fontWeight: 800,
+                                            opacity: (isSendingPush || pushSubscribers === 0) ? 0.5 : 1
+                                        }}
+                                    >
+                                        {isSendingPush ? 'ENVIANDO...' : `DISPARAR PARA ${pushSubscribers} INSCRITOS 🚀`}
+                                    </button>
+                                </form>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div className="glass-panel" style={{ border: '1px solid rgba(0, 240, 255, 0.2)', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--neon-blue)', fontWeight: 700, marginBottom: '5px' }}>AUDIÊNCIA ALCANÇÁVEL</div>
+                                    <div style={{ fontSize: '2.5rem', fontWeight: 900 }}>{pushSubscribers}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Navegadores com Permissão Ativa</div>
+                                </div>
+
+                                <div className="glass-panel" style={{ fontSize: '0.85rem' }}>
+                                    <h4 style={{ margin: '0 0 10px 0', color: 'var(--neon-purple)' }}>💡 Dicas de Engajamento</h4>
+                                    <ul style={{ paddingLeft: '1.2rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <li>Use <b>Emojis</b> para chamar mais atenção.</li>
+                                        <li>Mantenha o título com menos de <b>40 caracteres</b>.</li>
+                                        <li>Notificações enviadas às <b>08:00</b> ou <b>18:00</b> costumam ter mais cliques.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )  }
+
                 {activeTab === 'empresas' && (
                     <div className="glass-panel animation-fade-in">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                             <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>🏢 Gerenciar Parceiros</h2>
                             <button onClick={() => setShowNewEmpresaModal(true)} className="neon-button" style={{ margin: 0, padding: '8px 16px', width: 'auto' }}>
                                 <Plus size={16} /> NOVO PERFIL
                             </button>
                         </div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                            <thead>
-                                <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
-                                    <th style={{ padding: '12px' }}>Empresa</th>
-                                    <th style={{ padding: '12px' }}>CNPJ</th>
-                                    <th style={{ padding: '12px' }}>Contato</th>
-                                    <th style={{ padding: '12px' }}>Status</th>
-                                    <th style={{ padding: '12px' }}>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {allEmpresas.map(emp => (
-                                    <tr key={emp.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <td style={{ padding: '12px' }}>
-                                            <strong>{emp.razao_social}</strong>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Desde: {new Date(emp.created_at).toLocaleDateString()}</div>
-                                        </td>
-                                        <td style={{ padding: '12px' }}>{emp.cnpj || '—'}</td>
-                                        <td style={{ padding: '12px' }}>{emp.email_contato || '—'}</td>
-                                        <td style={{ padding: '12px' }}>
-                                            <span style={{ 
-                                                padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem',
-                                                background: emp.user_id ? 'rgba(34, 197, 94, 0.1)' : 'rgba(251, 191, 36, 0.1)',
-                                                color: emp.user_id ? '#4ade80' : '#fbbf24'
-                                            }}>
-                                                {emp.user_id ? 'ATIVO' : 'PENDENTE'}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '12px', display: 'flex', gap: '8px' }}>
-                                            <button onClick={() => handleAprovarEmpresa(emp.id, !emp.aprovada)} className="neon-button secondary" style={{ margin: 0, padding: '4px 8px', fontSize: '0.7rem', width: 'auto' }}>
-                                                {emp.aprovada ? 'Bloquear' : 'Aprovar'}
-                                            </button>
-                                            <button onClick={() => setUserToDelete(emp)} className="neon-button error" style={{ margin: 0, padding: '4px 8px', fontSize: '0.7rem', width: 'auto', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444' }}>
-                                                Excluir
-                                            </button>
-                                        </td>
+                        
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                                        <th style={{ padding: '12px' }}>Empresa</th>
+                                        {!isMobile && <th style={{ padding: '12px' }}>CNPJ</th>}
+                                        {!isMobile && <th style={{ padding: '12px' }}>Plano</th>}
+                                        <th style={{ padding: '12px' }}>Status</th>
+                                        <th style={{ padding: '12px' }}>Ações</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {allEmpresas.map(emp => (
+                                        <tr key={emp.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '12px' }}>
+                                                <strong>{emp.razao_social}</strong>
+                                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Membro desde: {new Date(emp.created_at).toLocaleDateString()}</div>
+                                            </td>
+                                            {!isMobile && <td style={{ padding: '12px' }}>{emp.cnpj || '—'}</td>}
+                                            {!isMobile && <td style={{ padding: '12px' }}>
+                                                <span style={{ 
+                                                    padding: '4px 10px', 
+                                                    borderRadius: '20px', 
+                                                    fontSize: '0.75rem', 
+                                                    fontWeight: 800,
+                                                    background: emp.plan_type === 'premium' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(148, 163, 184, 0.1)',
+                                                    color: emp.plan_type === 'premium' ? '#a855f7' : '#94a3b8'
+                                                }}>
+                                                    {(emp.plan_type || 'BASIC').toUpperCase()}
+                                                </span>
+                                            </td>}
+                                            <td style={{ padding: '12px' }}>
+                                                <span style={{ 
+                                                    padding: '2px 8px', borderRadius: '10px', fontSize: '0.7rem', 
+                                                    background: !emp.aprovada ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                                                    color: !emp.aprovada ? '#ef4444' : '#22c55e',
+                                                    fontWeight: 600
+                                                }}>
+                                                    {emp.aprovada ? 'ATIVO' : 'BLOQUEADO'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '12px', gap: '6px', display: 'flex' }}>
+                                                <button 
+                                                    onClick={() => handleMudarPlano(emp.id, emp.plan_type === 'premium' ? 'basic' : 'premium')}
+                                                    className="neon-button secondary"
+                                                    style={{ 
+                                                        margin: 0, padding: '4px 10px', fontSize: '0.7rem', width: 'auto', 
+                                                        background: emp.plan_type === 'premium' ? 'rgba(34, 197, 94, 0.1)' : 'var(--neon-purple)', 
+                                                        color: emp.plan_type === 'premium' ? '#22c55e' : '#fff' 
+                                                    }}
+                                                >
+                                                    {emp.plan_type === 'premium' ? (isMobile ? 'BASIC' : 'Rebaixar p/ Basic') : (isMobile ? '⭐ PREM' : '⭐ Tornar Premium')}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleAprovarEmpresa(emp.id, !emp.aprovada)} 
+                                                    className="neon-button secondary" 
+                                                    style={{ margin: 0, padding: '4px 10px', fontSize: '0.7rem', width: 'auto' }}
+                                                >
+                                                    {emp.aprovada ? (isMobile ? 'BLOQ' : 'Bloquear') : (isMobile ? 'LIBERAR' : 'Liberar')}
+                                                </button>
+                                                <button onClick={() => setUserToDelete(emp)} className="neon-button error" style={{ margin: 0, padding: '6px', fontSize: '0.7rem', width: 'auto', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444' }}>
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
@@ -1455,113 +1797,118 @@ export default function AdminDashboard() {
 
                 {activeTab === 'logs' && (
                     <div className="glass-panel animation-fade-in">
-                        <h2 style={{ color: 'var(--neon-blue)', marginBottom: '1.5rem' }}>🔐 Log de Auditoria</h2>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                            <thead>
-                                <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
-                                    <th style={{ padding: '12px' }}>Usuário</th>
-                                    <th style={{ padding: '12px' }}>Ação</th>
-                                    <th style={{ padding: '12px' }}>Data/Hora</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {accessLogs.map(l => (
-                                    <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <td style={{ padding: '12px' }}>{l.email.toLowerCase()}</td>
-                                        <td style={{ padding: '12px' }}>
-                                            <span style={{ color: '#4ade80' }}>{l.action.toUpperCase()}</span>
-                                        </td>
-                                        <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{new Date(l.accessed_at).toLocaleString()}</td>
+                        <h2 style={{ color: 'var(--neon-blue)', marginBottom: '1.5rem', fontSize: isMobile ? '1.2rem' : '1.8rem' }}>🔐 Log de Auditoria</h2>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                                        <th style={{ padding: '12px' }}>Usuário</th>
+                                        <th style={{ padding: '12px' }}>Ação</th>
+                                        <th style={{ padding: '12px' }}>Data/Hora</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {accessLogs.map(l => (
+                                        <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                            <td style={{ padding: '12px', maxWidth: isMobile ? '120px' : 'none', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.email.toLowerCase()}</td>
+                                            <td style={{ padding: '12px' }}>
+                                                <span style={{ color: '#4ade80', fontWeight: 600 }}>{l.action.toUpperCase()}</span>
+                                            </td>
+                                            <td style={{ padding: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(l.accessed_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
                 {activeTab === 'lgpd' && (
                     <div className="glass-panel animation-fade-in">
-                        <h2 style={{ color: 'var(--neon-blue)', marginBottom: '1.5rem' }}>🛡️ Privacidade LGPD</h2>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                            <thead>
-                                <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
-                                    <th style={{ padding: '12px' }}>Usuário</th>
-                                    <th style={{ padding: '12px' }}>Consentimento</th>
-                                    <th style={{ padding: '12px' }}>Data Aceite</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {consentLogs.map(l => (
-                                    <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <td style={{ padding: '12px' }}>{l.email.toLowerCase()}</td>
-                                        <td style={{ padding: '12px' }}>
-                                            {l.accepted_terms ? <span style={{color: '#4ade80'}}>ACEITO</span> : <span style={{color: '#ef4444'}}>RESTRITO</span>}
-                                        </td>
-                                        <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{new Date(l.consented_at).toLocaleDateString()}</td>
+                        <h2 style={{ color: 'var(--neon-blue)', marginBottom: '1.5rem', fontSize: isMobile ? '1.2rem' : '1.8rem' }}>🛡️ Privacidade LGPD</h2>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: isMobile ? '0.75rem' : '0.85rem' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                                        <th style={{ padding: '12px' }}>Usuário</th>
+                                        <th style={{ padding: '12px' }}>Consentimento</th>
+                                        <th style={{ padding: '12px' }}>Data Aceite</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {consentLogs.map(l => (
+                                        <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                            <td style={{ padding: '12px', maxWidth: isMobile ? '150px' : 'none', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.email.toLowerCase()}</td>
+                                            <td style={{ padding: '12px' }}>
+                                                {l.accepted_terms ? <span style={{color: '#4ade80', fontWeight: 800}}>ACEITO</span> : <span style={{color: '#ef4444', fontWeight: 800}}>RESTRITO</span>}
+                                            </td>
+                                            <td style={{ padding: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(l.consented_at).toLocaleDateString()}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
                 {activeTab === 'denuncias' && (
                     <div className="glass-panel animation-fade-in">
-                        <h2 style={{ color: '#f87171', marginBottom: '1.5rem' }}>🚨 Ouvidoria / Denúncias</h2>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                            <thead>
-                                <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
-                                    <th style={{ padding: '12px' }}>Vaga / Empresa</th>
-                                    <th style={{ padding: '12px' }}>Motivo</th>
-                                    <th style={{ padding: '12px' }}>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {denuncias.length === 0 ? (
-                                    <tr><td colSpan="3" style={{ padding: '2rem', textAlign: 'center' }}>Nenhuma denúncia no momento. ✨</td></tr>
-                                ) : denuncias.map(d => (
-                                    <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <td style={{ padding: '12px' }}>
-                                            <strong>{d.vagas?.titulo}</strong><br/>
-                                            {d.empresas?.razao_social}
-                                        </td>
-                                        <td style={{ padding: '12px', color: '#fda4af' }}>"{d.motivo}"</td>
-                                        <td style={{ padding: '12px' }}>
-                                            <button onClick={() => { setVagaToClose(d.vagas); setRelatedDenunciaId(d.id); }} className="neon-button error" style={{ margin: 0, padding: '6px 12px', width: 'auto', fontSize: '0.8rem' }}>Suspender Vaga</button>
-                                        </td>
+                        <h2 style={{ color: '#f87171', marginBottom: '1.5rem', fontSize: isMobile ? '1.2rem' : '1.8rem' }}>🚨 Ouvidoria / Denúncias</h2>
+                        <div className="table-responsive">
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                                        <th style={{ padding: '12px' }}>Vaga / Empresa</th>
+                                        <th style={{ padding: '12px' }}>Motivo</th>
+                                        <th style={{ padding: '12px' }}>Ações</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {denuncias.length === 0 ? (
+                                        <tr><td colSpan="3" style={{ padding: '2rem', textAlign: 'center' }}>Nenhuma denúncia no momento. ✨</td></tr>
+                                    ) : denuncias.map(d => (
+                                        <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                            <td style={{ padding: '12px' }}>
+                                                <strong>{d.vagas?.titulo}</strong><br/>
+                                                <span style={{ fontSize: '0.8em', color: 'var(--text-muted)' }}>{d.empresas?.razao_social}</span>
+                                            </td>
+                                            <td style={{ padding: '12px', color: '#fda4af', fontStyle: 'italic' }}>"{d.motivo}"</td>
+                                            <td style={{ padding: '12px' }}>
+                                                <button onClick={() => { setVagaToClose(d.vagas); setRelatedDenunciaId(d.id); }} className="neon-button error" style={{ margin: 0, padding: '6px 12px', width: 'auto', fontSize: '0.7rem' }}>SUSPENDER</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 
                 {activeTab === 'contratacoes' && (
                     <div className="glass-panel animation-fade-in">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem', flexDirection: isMobile ? 'column' : 'row' }}>
                             <div>
-                                <h2 style={{ color: 'var(--neon-blue)', margin: 0 }}>🏆 Mural de Conquistas</h2>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Relatório consolidado de candidatos que efetivaram contratação pelo sistema</p>
+                                <h2 style={{ color: 'var(--neon-blue)', margin: 0, fontSize: isMobile ? '1.2rem' : '1.8rem' }}>🏆 Mural de Conquistas</h2>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Relatório consolidado de contratações pelo sistema</p>
                             </div>
-                            <div className="input-group" style={{ marginBottom: 0, width: '300px' }}>
+                            <div className="input-group" style={{ marginBottom: 0, width: isMobile ? '100%' : '300px' }}>
                                 <div style={{ position: 'relative' }}>
                                     <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '14px' }} />
-                                    <input className="neon-input" style={{ paddingLeft: '38px' }} placeholder="Filtrar por nome ou empresa..." value={filtroContratado} onChange={e => setFiltroContratado(e.target.value)} />
+                                    <input className="neon-input" style={{ paddingLeft: '38px', width: '100%' }} placeholder="Buscar nome ou empresa..." value={filtroContratado} onChange={e => setFiltroContratado(e.target.value)} />
                                 </div>
                             </div>
                         </div>
 
                         {loading ? <p>Carregando contratações...</p> : (
                             <div className="table-responsive">
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
+                                    <thead style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left', color: 'var(--text-muted)' }}>
                                         <tr>
-                                            <th style={{ padding: '1rem' }}>Candidato</th>
-                                            <th style={{ padding: '1rem' }}>Vaga</th>
-                                            <th style={{ padding: '1rem' }}>Empresa</th>
-                                            <th style={{ padding: '1rem' }}>Data do Sucesso</th>
-                                            <th style={{ padding: '1rem' }}>Contato</th>
-                                            <th style={{ padding: '1rem' }}>Ações</th>
+                                            <th style={{ padding: isMobile ? '10px' : '1rem' }}>Candidato</th>
+                                            <th style={{ padding: isMobile ? '10px' : '1rem' }}>Vaga / Empresa</th>
+                                            {!isMobile && <th style={{ padding: '1rem' }}>Data</th>}
+                                            {!isMobile && <th style={{ padding: '1rem' }}>Contato</th>}
+                                            <th style={{ padding: isMobile ? '10px' : '1rem' }}>Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1570,46 +1917,43 @@ export default function AdminDashboard() {
                                             c.vagas?.empresas?.razao_social?.toLowerCase().includes(filtroContratado.toLowerCase())
                                         ).map(c => (
                                             <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(56,189,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-blue)', fontWeight: 800 }}>
+                                                <td style={{ padding: isMobile ? '10px' : '1rem' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(56,189,248,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--neon-blue)', fontWeight: 800, fontSize: '0.7rem' }}>
                                                             {c.curriculos?.nome?.substring(0, 1)}
                                                         </div>
                                                         <div>
                                                             <div style={{ fontWeight: 700 }}>{c.curriculos?.nome}</div>
-                                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.curriculos?.email}</div>
+                                                            {isMobile && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(c.created_at).toLocaleDateString()}</div>}
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <span style={{ fontWeight: 600, color: 'var(--norte-teal)' }}>{c.vagas?.titulo}</span>
+                                                <td style={{ padding: isMobile ? '10px' : '1rem' }}>
+                                                    <div style={{ fontWeight: 600, color: 'var(--norte-teal)' }}>{c.vagas?.titulo}</div>
+                                                    <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>{c.vagas?.empresas?.razao_social}</div>
                                                 </td>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <span style={{ fontWeight: 600 }}>{c.vagas?.empresas?.razao_social}</span>
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>
+                                                {!isMobile && <td style={{ padding: '1rem' }}>
                                                     <div style={{ fontSize: '0.9rem' }}>{new Date(c.created_at).toLocaleDateString()}</div>
-                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>
+                                                </td>}
+                                                {!isMobile && <td style={{ padding: '1rem' }}>
                                                     <span style={{ fontSize: '0.85rem' }}>{c.curriculos?.telefone || '—'}</span>
-                                                </td>
-                                                <td style={{ padding: '1rem' }}>
+                                                </td>}
+                                                <td style={{ padding: isMobile ? '10px' : '1rem' }}>
                                                     <button 
                                                         onClick={() => navigate(`/cv-preview/${c.user_id}`)} 
                                                         className="neon-button secondary" 
-                                                        style={{ margin: 0, padding: '6px 12px', fontSize: '0.7rem', width: 'auto' }}
+                                                        style={{ margin: 0, padding: '4px 10px', fontSize: '0.65rem', width: 'auto' }}
                                                     >
-                                                        VER PERFIL
+                                                        {isMobile ? 'VER' : 'VER PERFIL'}
                                                     </button>
                                                 </td>
                                             </tr>
                                         ))}
                                         {contratacoesList.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                                <td colSpan={5} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                                                     <CheckCircle size={40} style={{ opacity: 0.3, marginBottom: '1rem' }} />
-                                                    <br />Nenhuma contratação oficializada no período.
+                                                    <br />Nenhuma contratação oficializada.
                                                 </td>
                                             </tr>
                                         )}
@@ -1699,25 +2043,45 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {/* TOAST NOTIFICATION */}
+            {/* SISTEMA DE TOASTS PREMIUM */}
             {notification && (
                 <div style={{
-                    position: 'fixed', bottom: '2rem', right: '2rem',
-                    background: notification.type === 'success' ? '#22c55e' : '#ef4444',
-                    color: '#fff', padding: '1rem 2rem', borderRadius: '12px',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    zIndex: 10001, animation: 'slideInRight 0.4s ease-out'
+                    position: 'fixed',
+                    bottom: '24px',
+                    right: '24px',
+                    zIndex: 9999,
+                    animation: 'slideUpNotif 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards'
                 }}>
-                    {notification.type === 'success' ? <CheckCircle size={20} /> : <ShieldAlert size={20} />}
-                    <span style={{ fontWeight: 600 }}>{notification.message}</span>
+                    <div className="glass-panel" style={{
+                        padding: '16px 24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        background: notification.type === 'error' 
+                            ? 'rgba(220, 38, 38, 0.95)' 
+                            : 'rgba(0, 141, 76, 0.95)',
+                        color: '#fff',
+                        boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+                        borderRadius: '20px',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        minWidth: '300px'
+                    }}>
+                        {notification.type === 'error' ? <ShieldAlert size={28} /> : <CheckCircle size={28} />}
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontWeight: 800, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                {notification.type === 'error' ? 'Falha no Envio' : 'Sucesso Total'}
+                            </span>
+                            <span style={{ fontSize: '0.85rem', opacity: 0.9 }}>{notification.msg}</span>
+                        </div>
+                    </div>
                 </div>
             )}
 
             <style>{`
-                @keyframes slideInRight {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
+                @keyframes slideUpNotif {
+                    from { transform: translateY(100%) scale(0.9); opacity: 0; }
+                    to { transform: translateY(0) scale(1); opacity: 1; }
                 }
             `}</style>
         </div>

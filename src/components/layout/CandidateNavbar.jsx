@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, Briefcase, List, LogOut, ChevronDown, FileText, Scale, Shield, Trash2, Brain, Compass } from 'lucide-react';
+import { User, Briefcase, List, LogOut, ChevronDown, FileText, Scale, Shield, Trash2, Brain, Compass, BarChart3, Award } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import Navbar from './Navbar';
 import BrandLogo from './BrandLogo';
 
 export default function CandidateNavbar({ subtitle, profilePhoto }) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { pago } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const menuRef = useRef(null);
 
@@ -130,6 +132,14 @@ export default function CandidateNavbar({ subtitle, profilePhoto }) {
                         </button>
                         <button style={dropdownItemStyle('/vagas')} onClick={() => { navigate('/vagas'); setIsMenuOpen(false); }}>
                             <Briefcase size={18} /> VAGAS
+                        </button>
+                        <button style={dropdownItemStyle('/estatisticas')} onClick={() => { navigate('/estatisticas'); setIsMenuOpen(false); }}>
+                            <div style={{ position: 'relative' }}>
+                                <BarChart3 size={18} />
+                                {!pago && <div style={{ position: 'absolute', top: '-4px', right: '-4px', width: '8px', height: '8px', background: '#f59e0b', borderRadius: '50%', border: '2px solid #fff' }} />}
+                            </div>
+                            DESEMPENHO DO PERFIL
+                            {pago && <Award size={14} color="#7c3aed" fill="#7c3aed" style={{ marginLeft: 'auto' }} />}
                         </button>
 
                         <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 8px' }} />
