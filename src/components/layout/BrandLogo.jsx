@@ -1,7 +1,9 @@
+import logoNorte from '../../assets/logo-norte.png';
+
 export default function BrandLogo({ size = 24, style = {} }) {
     return (
         <img 
-            src="/logo-norte.png" 
+            src={logoNorte} 
             alt="Norte Empregos" 
             style={{ 
                 width: `${size}px`, 
